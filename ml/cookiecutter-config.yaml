@@ -1,0 +1,23 @@
+default_context:
+    author: "Gigi Fok"
+    email: "gigifokcm@gmail.com"
+    author_github_handle: "gigifokchiman"
+    project_name: "testing"
+    project_slug: "{{cookiecutter.project_name|lower|replace('-', '_')}}"
+    project_description: "Training models"
+    include_github_actions: "y"
+    publish_to: ["pypi", "artifactory", "none"]
+    deptry: "y"
+    mkdocs: "y"
+    codecov: "y"
+    dockerfile: "y"
+    devcontainer: "y"
+    open_source_license: "Not open source"
+#cookiecutters_dir: "/home/audreyr/my-custom-cookiecutters-dir/"
+#replay_dir: "/home/audreyr/my-custom-replay-dir/"
+abbreviations:
+    pp: https://github.com/audreyr/cookiecutter-pypackage.git
+    gh: https://github.com/{0}.git
+    bb: https://bitbucket.org/{0}
+
+
