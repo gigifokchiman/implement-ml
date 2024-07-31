@@ -40,6 +40,7 @@ ifeq ($(INCLUDE_MACHINE_LEARNING),True)
 endif
 ifeq ($(INCLUDE_WEB),True)
 	SETUPS += web
+endif
 
 setup_data_engineering:
 	@echo "Setting up the project for data engineering..."
