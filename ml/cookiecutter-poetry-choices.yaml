@@ -5,32 +5,14 @@ default_context:
     project_name: "example-project"
     project_slug: "{{cookiecutter.project_name|lower|replace('-', '_')}}"
     project_description: "This is a template repository for Python projects that use Poetry for their dependency management."
-    include_github_actions:
-      - "y"
-      - "n"
+    include_github_actions: ["no", "yes"]
     publish_to:
       - "pypi"
       - "artifactory"
       - "none"
-    deptry:
-      - "y"
-      - "n"
-    mkdocs:
-      - "y"
-      - "n"
-    codecov:
-      - "y"
-      - "n"
-    dockerfile:
-      - "y"
-      - "n"
-    devcontainer:
-      - "y"
-      - "n"
-    open_source_license:
-      - "MIT license"
-      - "BSD license"
-      - "ISC license"
-      - "Apache Software License 2.0"
-      - "GNU General Public License v3"
-      - "Not open source"
+    deptry: ["no", "yes"]
+    mkdocs: ["no", "yes"]
+    codecov: ["no", "yes"]
+    dockerfile: ["no", "yes"]
+    devcontainer: ["no", "yes"]
+    open_source_license: ["MIT license", "BSD license", "ISC license", "Apache Software License 2.0",  "GNU General Public License v3", "Not open source"]

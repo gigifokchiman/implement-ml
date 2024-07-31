@@ -3,7 +3,7 @@ default_context:
     app_name: "myapi"
     python_version:  ["3.8", "3.7", "3.6"]
     tox_python_env: "py{{ cookiecutter.python_version|replace('.','') }}"
-    use_celery: ["no", "yes"]
+    use_celery: "no"
     admin_user_username: "admin"
     admin_user_email: "admin@mail.com"
     admin_user_password: "admin"
