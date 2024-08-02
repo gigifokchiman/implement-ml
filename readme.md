@@ -15,6 +15,21 @@ Terraform sagemaker pipeline
 API templates
 - https://github.com/karec/cookiecutter-flask-restful.git
 
+Flink:
+- https://flink.apache.org/2020/07/28/flink-sql-demo-building-an-end-to-end-streaming-application/
+
+Kafka datagen:
+- https://github.com/confluentinc/kafka-connect-datagen/tree/master
+
+Airflow docker (official)
+- https://airflow.apache.org/docs/apache-airflow/2.0.2/docker-compose.yaml
+
+Airflow dbt:
+- https://github.com/Murataydinunimi/AIRFLOW_DBT_SNOWFLAKE_DOCKER.git
+
+Example flink
+- https://github.com/docker-flink/examples/tree/master
+
 
 
 
