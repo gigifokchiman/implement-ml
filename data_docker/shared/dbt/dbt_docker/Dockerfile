@@ -16,15 +16,12 @@ WORKDIR /usr/app
 RUN cd /usr/app
 
 COPY requirements.txt ./
-COPY ./dbt ./dbt_docker
-COPY ./dbt_sync.sh ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /usr/app/dbt_docker
 
 # Install Python Requirements
-
 ENV DBT_PROFILES_DIR /usr/app/dbt_docker
 
 # Create alias for dbt_docker-set-profile

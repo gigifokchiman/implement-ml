@@ -6,9 +6,9 @@
 # Use postgres to store the transactional data
 # Data processing:
 # Airflow to orchestrate the data processing
-# Use Kafka to stream the data
-# Use Flink to process the data
-# Use dbt to transform the data
+# Use Kafka to stream the streaming data
+# Use Flink to process the streaming data
+# Use dbt to transform the data in batch
 # Data connectors:
 # Trino to connect to the data sources
 # Analytic queries:
@@ -21,7 +21,7 @@
 
 x-airflow-common: &airflow-common
   build:
-    context: ./airflow
+    context: ./shared/airflow
     dockerfile: Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -34,9 +34,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
     AIRFLOW__CORE__SKIP_DB_INIT: 'true'
   volumes:
-    - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-    - ./plugins:/opt/airflow/plugins
+    - ./shared/airflow/dags:/opt/airflow/dags
+    - ./shared/airflow/plugins:/opt/airflow/plugins
+    - ./volumes-airflow-logs:/opt/airflow/logs
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
@@ -49,14 +49,13 @@ services:
   # airflow backend
   postgres-airflow:
     image: postgres:13
-    hostname: postgres-airflow
     container_name: postgres-airflow
     environment:
       POSTGRES_USER: airflow_user
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     volumes:
-      - ./postgres-airflow-volume:/var/lib/postgresql/data
+      - ./volumes-postgres-airflow:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
       interval: 5s
@@ -64,9 +63,11 @@ services:
     ports:
       - "5432:5432"
     restart: always
+    networks:
+      - analytics
+
   redis:
     image: redis:latest
-    hostname: redis
     container_name: redis
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -74,37 +75,45 @@ services:
       timeout: 30s
       retries: 50
     restart: always
+    networks:
+      - analytics
     # airflow components
   airflow-init:
     <<: *airflow-common
     command: version
+    container_name: airflow-init
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'false'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow_user}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    networks:
+      - analytics
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.7.0
-    hostname: zookeeper
     container_name: zookeeper
     ports:
       - '32181:32181'
     environment:
       ZOOKEEPER_CLIENT_PORT: 32181
       ZOOKEEPER_TICK_TIME: 2000
-    extra_hosts:
-      - "moby:127.0.0.1"
+#    extra_hosts:
+#      - "moby:127.0.0.1"
+    networks:
+      - analytics
+
   kafka:
     image: confluentinc/cp-enterprise-kafka:7.7.0
-    hostname: kafka
     container_name: kafka
     ports:
       - '9092:9092'
       - '29092:29092'
     depends_on:
       - zookeeper
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--zookeeper", "zookeeper:32181"]
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:32181
@@ -119,11 +128,11 @@ services:
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
       CONFLUENT_METRICS_ENABLE: 'true'
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
-    extra_hosts:
-      - "moby:127.0.0.1"
+    networks:
+      - analytics
+
   connect:
     image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
-    hostname: connect
     container_name: connect
     restart: always
     ports:
@@ -151,9 +160,11 @@ services:
       CONNECT_ZOOKEEPER_CONNECT: 'zookeeper:32181'
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
       CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+    networks:
+      - analytics
+
   schema-registry:
     image: confluentinc/cp-schema-registry:7.7.0
-    hostname: schema-registry
     container_name: schema-registry
     depends_on:
       - zookeeper
@@ -165,10 +176,14 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:32181
     extra_hosts:
       - "moby:127.0.0.1"
+    networks:
+      - analytics
+
   elasticsearch:
-    hostname: elasticsearch
     container_name: elasticsearch
     image: elasticsearch:7.17.23
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
     environment:
       - cluster.name=dbt-docker-cluster
       - bootstrap.memory_lock=true
@@ -184,6 +199,9 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    networks:
+      - analytics
+
   kibana:
     hostname: kibana
     container_name: kibana
@@ -191,49 +209,72 @@ services:
     image: kibana:7.17.23
     ports:
       - "5601:5601"
-  jobmanager:
-    image: flink:1.17.2-scala_2.12-java11
-    hostname: jobmanager
-    container_name: jobmanager
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601"]
+    networks:
+      - analytics
+
+  flink-jobmanager: # session mode
+    image: flink:1.17.2-java11
+    container_name: flink-jobmanager
     ports:
-      - "8082:8082"
-    command: jobmanager
+      - "8082:8081"
+    command:
+      - jobmanager
+      - mkdir -p /opt/flink/usrlib
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-  taskmanager:
-    image: flink:1.17.2-scala_2.12-java11
-    hostname: taskmanager
-    container_name: taskmanager
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8082"]
+    networks:
+      - analytics
+
+  flink-taskmanager:
+    image: flink:1.17.2-java11
+    container_name: flink-taskmanager
     depends_on:
-      - jobmanager
+      - flink-jobmanager
     command: taskmanager
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 10
-  sql-client:
+    volumes:
+      - ./volumes-flink-task-manager-file-sink:/opt/flink/output
+    networks:
+      - analytics
+
+  flink-sql-client:
+    container_name: flink-sql-client
     build:
-      context: ./sql-client
+      context: ./shared/flink/sql-client
       dockerfile: Dockerfile
     depends_on:
       - kafka
-      - jobmanager
+      - flink-jobmanager
       - elasticsearch
     environment:
-      FLINK_JOBMANAGER_HOST: jobmanager
+      FLINK_JOBMANAGER_HOST: flink-jobmanager
       ZOOKEEPER_CONNECT: zookeeper
       KAFKA_BOOTSTRAP: kafka
-      MYSQL_HOST: mysql
+      MYSQL_HOST: postgres-db
       ES_HOST: elasticsearch
+    networks:
+      - analytics
+
   trino:
-    image: trinodb/trino:453
+    build:
+      context: ./shared/trino
+      dockerfile: Dockerfile
     container_name: trino
     hostname: trino
     ports:
       - "28080:8080"
+    networks:
+      - analytics
 
   airflow-webserver:
     <<: *airflow-common
@@ -246,6 +287,8 @@ services:
       timeout: 10s
       retries: 5
     restart: always
+    networks:
+      - analytics
 
   airflow-scheduler:
     <<: *airflow-common
@@ -256,7 +299,6 @@ services:
     #      timeout: 10s
     #      retries: 5
     restart: always
-
   airflow-worker:
     <<: *airflow-common
     command: celery worker
@@ -267,9 +309,11 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"
     restart: always
+    networks:
+      - analytics
 
   flower:
     <<: *airflow-common
@@ -282,6 +326,8 @@ services:
       timeout: 10s
       retries: 5
     restart: always
+    networks:
+      - analytics
 
   airflow-python:
     <<: *airflow-common
@@ -291,14 +337,16 @@ services:
       <<: *airflow-common-env
     user: "50000:0"
     entrypoint: [ "bash" ]
+    networks:
+      - analytics
 
   dbt:
     container_name: dbt
     hostname: dbt
     build:
-      context: ./dbt-docker
+      context: ./shared/dbt/dbt_docker
       dockerfile: Dockerfile
-    # image: custom_dbt_image_test
+    image: custom_dbt_image
     command:
       - bash
       - -c
@@ -308,43 +356,42 @@ services:
         sleep infinity
     restart: unless-stopped
     volumes:
-      - ./dbt-docker/dbt:/usr/app/dbt
+      - ./shared/dbt/staging:/usr/app/dbt
     ports:
       - "8085:8085"
     environment:
       - TZ=Etc/GMT
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8085/health"]
+    networks:
+      - analytics
 
   postgres-db:
     image: postgres:13-alpine
-    hostname: postgres-db
     container_name: postgres-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: jaffle_shop
     volumes:
-      - ./postgres-db-volume:/var/lib/postgresql/data
+      - ./volumes-postgres-db:/var/lib/postgresql/data
     ports:
       - "55432:5432"
     restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      retries: 5
+    networks:
+      - analytics
 
 
-#
-#  pgadmin:
-#      image: dpage/pgadmin4:4.27
-#      restart: always
-#      environment:
-#          PGADMIN_DEFAULT_EMAIL: admin_user@test_email.com
-#          PGADMIN_DEFAULT_PASSWORD: test_password
-#          PGADMIN_LISTEN_PORT: 1111
-#      ports:
-#      - "1111:1111"
-#      volumes:
-#      - pgadmin-data:/var/lib/pgadmin
-#      links:
-#      - "db:pgsql-server"
+networks:
+  analytics:
+    driver: bridge
 
 volumes:
-  postgres-airflow-volume:
-  postgres-db-volume:
-
+  volumes-postgres-airflow:
+  volumes-postgres-db:
+  volumes-airflow-log:
+  volumes-flink-task-manager-file-sink:
