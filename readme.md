@@ -27,9 +27,15 @@ Airflow docker (official)
 Airflow dbt:
 - https://github.com/Murataydinunimi/AIRFLOW_DBT_SNOWFLAKE_DOCKER.git
 
+Flink docker (official)
+- https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/docker/
+
 Example flink
 - https://github.com/docker-flink/examples/tree/master
 
+Delta table
+- https://github.com/delta-io/delta-docker/tree/main
 
-
-
+Iceberg table
+- https://github.com/myfjdthink/trino-iceberg-docker/blob/master/docker-compose.yml
+- https://hendoxc.substack.com/p/apache-iceberg-trino-iceberg-kafka?r=2vfgpf&utm_campaign=post&utm_medium=web&triedRedirect=true
