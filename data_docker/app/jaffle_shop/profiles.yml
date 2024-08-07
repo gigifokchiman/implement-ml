@@ -2,7 +2,8 @@ jaffle_shop:
   outputs:
     dev:
       type: postgres
-      host: host.docker.internal
+#      host: host.docker.internal
+      host: postgres-db
       user: postgres
       password: password
       port: 55432
@@ -19,3 +20,4 @@ jaffle_shop:
 #      sslkey: [optional, set the sslkey to control the location of the private key]
 #      sslrootcert: [optional, set the sslrootcert config value to a new file path in order to customize the file location that contain root certificates]
   target: dev
+

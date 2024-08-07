@@ -1,0 +1,179 @@
+TOPIC_NAME = pageviews
+TOPIC_OPTION = ""
+TOPIC_FILE = connector_$(TOPIC_NAME)$(TOPIC_OPTION).config
+TOPIC_FILE_PATH = app/$(PROJECT_NAME)/datagen/$(TOPIC_FILE)
+PROJECT_NAME = pageviewscount
+PROJECT_GROUP_ID = com.flinkexamples
+PROJECT_PACKAGE = com.flinkexamples.pageviewscount
+
+FLINK_VERSION = 1.17.2
+
+
+#test_dbt_postgres:
+##	@echo "testing dbt"
+##	@docker compose exec dbt bash -c "dbt debug"
+#	@echo "testing postgres connection"
+#	@docker-compose exec -e PGPASSWORD=password postgres-db psql -U postgres -d jaffle_shop -h 'host.docker.internal' -p 55432 -c "\dt"
+#
+#test_airflow:
+#	@echo "testing health"
+#	@$(MAKE) test_health_port PORT=$(AIRFLOW_PORT)/health SERVICE=airflow
+
+#test_connect_client:
+#	@echo "testing connect to flink"
+#	@docker-compose exec sql-client flink list
+#	@echo "testing connect to dbt"
+#	@docker-compose exec dbt dbt debug
+#	@echo "testing connect to air"
+
+#test-docker:
+#	@docker-compose up test
+
+#test_health_port:
+## curl -k -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET http://localhost/course
+#ifneq ($(shell curl --write-out "%{http_code}" --silent --output /dev/null http://localhost:$(PORT)), 200)
+#	@echo "$(SERVICE) is not ready";
+#else
+#	@:
+#endif
+
+#########
+# Open UI
+#########
+#open_flink_ui:
+#	@open http://localhost:8081
+#
+#open_airflow_ui:
+#	@open http://localhost:8080
+#
+#open_kibana:
+#	@open http://localhost:5601
+#
+############
+## Additional commands for testing and debugging
+############
+#.PHONY: download_datagen_files
+#download_datagen_files:
+#	@echo "downloading files (config folder for generating streaming data)"
+#	@mkdir -p ./app/$(PROJECT_NAME)/datagen && \
+#	cd ./app/$(PROJECT_NAME)/datagen && \
+#	git clone https://github.com/confluentinc/kafka-connect-datagen.git && \
+#	cp -rfv ./kafka-connect-datagen/config/connector_$(TOPIC_NAME)$(TOPIC_OPTION).config . && \
+#	rm -rf ./kafka-connect-datagen
+#
+## The dbt docker captures the latest image of the dbt model in the /usr/app/dbt-docker at docker build stage.
+## To test the content quickly, we can use the /dbt folder to test the dbt content to quickly test the dbt content.
+#.PHONY: dbt_seed_it
+#dbt_seed_it:
+#	@docker compose exec -it -e DBT_PROFILES_DIR=/usr/app/dbt dbt bash -c "dbt seed --profiles-dir /usr/app/dbt"
+#
+##CONTAINER_NAME = kafka
+##.PHONY: privilege_bash
+##privilege_bash:
+##	@docker compose exec --privileged -u 0 -it $(CONTAINER_NAME) bash
+#
+#stop_all_containers:
+#	@docker-compose down --volumes --remove-orphans
+#	@docker ps -q | xargs docker stop
+#	@docker ps -a -q | xargs docker rm
+#
+#airflow_webserver:
+#	docker exec -it airflow-repo-template-webserver-1 airflow dags list
+#	docker exec -it airflow-repo-template-webserver-1 airflow dags trigger tutorial_dag
+#	docker exec -it airflow-repo-template-webserver-1 airflow dags show tutorial_dag --save /root/airflow/dags/tutorial_dag.png
+#	docker exec -it airflow-repo-template-webserver-1 airflow dags show custom_operator_dag --imgcat
+#
+#
+#flink_run_examples:
+#	./bin/flink run ./examples/streaming/TopSpeedWindowing.jar
+#
+#flink_run:
+#	@docker compose exec jobmanager flink run ./examples/streaming/TopSpeedWindowing.jar
+#	docker compose exec jobmanager flink savepoint \
+#      d6ab354d94e1f6a541bced0a79f1a483 \
+#      /tmp/flink-savepoints
+#
+#docker_check_ram:
+#	@docker run --rm busybox free
+#
+#
+#docker_check_dependencies:
+#	@docker run --rm flink:1.17.2-scala_2.12-java11 ls -R /opt/flink/lib
+#	# @docker compose exec jobmanager ls -R /opt/flink/lib
+##	@docker run --rm flink:1.17.2-scala_2.12-java11 jdeps -verbose:class /opt/flink/lib/*.jar
+#
+#do_script:
+#	@docker compose exec sql-client bash print_flink_pom.sh org.test
+#
+#
+#create_flink_project:
+#	@cd flink/app && \
+#	mvn archetype:generate \
+#		-DarchetypeGroupId=org.apache.flink \
+#		-DarchetypeArtifactId=flink-quickstart-java \
+#		-DarchetypeVersion=$(FLINK_VERSION) \
+#		-DgroupId=$(PROJECT_GROUP_ID) \
+#		-DartifactId=$(PROJECT_NAME) \
+#		-Dversion=0.1 \
+#		-Dpackage=$(PROJECT_PACKAGE) \
+#		-DinteractiveMode=false
+#
+#run_flink:
+#	@docker-compose exec postgres-db bash -c "psql -U postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='userdb'\" | grep -q 1 || psql -U postgres -c \"CREATE DATABASE userdb\""
+#	@$(MAKE) -C flink/app/$(PROJECT_NAME) all
+#	@docker-compose cp flink/app/$(PROJECT_NAME)/target/$(PROJECT_NAME)-0.1.jar jobmanager:/job.jar
+#	@docker-compose cp flink/app/$(PROJECT_NAME)/target/$(PROJECT_NAME)-0.1.jar sql-client:/job.jar
+#	@docker-compose exec sql-client flink run --jobmanager host.docker.internal:8082 --class com.flinkexamples.pageviewsjob.PageViewProcessor /job.jar
+#
+#PGPASSWORD=password psql -U postgres -d userdb -h localhost -p 55432 -f usercount.sql
+#
+#
+#
+##run_flink:
+##	@docker compose exec jobmanager flink run ./examples/streaming/TopSpeedWindowing.jar
+## @flink run --jobmanager localhost:8082 --class com.flinkexamples.pageviewsjob.PageViewProcessor ./flink/app/$(PROJECT_NAME)/target/$(PROJECT_NAME)-0.1.jar
+#
+
+	@docker-compose exec airflow-worker airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin # Will move to initial scripts
+
+
+#########
+# test
+#########
+.PHONY: test_all
+test_all: get_sample_streams \
+			test_dbt_postgres \
+			test_airflow \
+			test_connect_client \
+			open_kibana
+
+# datagen
+post_datagen:
+	@curl -X POST -H "Content-Type: application/json" --data @$(TOPIC_FILE_PATH) http://localhost:8083/connectors
+
+is_datagen:
+	@echo $$(curl -s -X GET -H "Content-Type: application/json" http://localhost:8083/connectors | grep -o "datagen-$(TOPIC_NAME)" | wc -l)
+
+
+.PHONY: get_sample_streams
+get_sample_streams:
+	$(MAKE) app/$(PROJECT_NAME)/kafka_sample_streams.log -B
+
+app/$(PROJECT_NAME)/kafka_sample_streams.log:
+	@echo "Starting Kafka stream operations..." && \
+	echo "Streams from connect from beginning" > $@ && \
+	docker-compose exec connect kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 --from-beginning >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from connect from beginning" >&2 && exit 1)
+	@echo "Streams from kafka from beginning" >> $@ && \
+	docker-compose exec kafka kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 --from-beginning >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from kafka from beginning" >&2 && exit 1)
+	@echo "Streams from connect" >> $@ && \
+	docker-compose exec connect kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from connect" >&2 && exit 1)
+	@echo "Streams from kafka" >> $@ && \
+	docker-compose exec kafka kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from kafka" >&2 && exit 1)
+	@echo "All Kafka stream operations completed successfully."
+
+
+docker-compose cp app/example.properties trino:/etc/catalog
