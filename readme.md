@@ -39,3 +39,7 @@ Delta table
 Iceberg table
 - https://github.com/myfjdthink/trino-iceberg-docker/blob/master/docker-compose.yml
 - https://hendoxc.substack.com/p/apache-iceberg-trino-iceberg-kafka?r=2vfgpf&utm_campaign=post&utm_medium=web&triedRedirect=true
+
+Migrate from Zookeeper to Kraft
+- https://developer.confluent.io/learn/kraft/
+

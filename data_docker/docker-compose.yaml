@@ -18,6 +18,17 @@
 # Use Kibana to visualize the logs
 # Use Fluentd to collect the logs
 #######
+networks:
+  analytics:
+    driver: bridge
+
+volumes:
+  volumes-airflow-postgres:
+  volumes-airflow-log:
+  volumes-flink-task-manager-file-sink:
+  volumes-postgres-db:
+  volumes-mongo-db:
+  volumes-minio:
 
 x-airflow-common: &airflow-common
   build:
@@ -25,9 +36,9 @@ x-airflow-common: &airflow-common
     dockerfile: Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:airflow@postgres-airflow:5432/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow_user:airflow@postgres-airflow:5432/airflow
-    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:airflow@airflow-postgres:5432/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow_user:airflow@airflow-postgres:5432/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -40,110 +51,67 @@ x-airflow-common: &airflow-common
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
-    redis:
+    airflow-redis:
       condition: service_healthy
-    postgres-airflow:
+    airflow-postgres:
       condition: service_healthy
+  profiles:
+    - airflow
 
 services:
-  # airflow backend
-  postgres-airflow:
-    image: postgres:13
-    container_name: postgres-airflow
-    environment:
-      POSTGRES_USER: airflow_user
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    volumes:
-      - ./volumes-postgres-airflow:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
-      interval: 5s
-      retries: 5
+  ######################
+  # Data sources and data stores
+  ######################
+  kafka-connect-consumer:
+    build:
+      context: ./shared/kafka-connect
+    container_name: kafka-connect
     ports:
-      - "5432:5432"
-    restart: always
-    networks:
-      - analytics
-
-  redis:
-    image: redis:latest
-    container_name: redis
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 5s
-      timeout: 30s
-      retries: 50
-    restart: always
-    networks:
-      - analytics
-    # airflow components
-  airflow-init:
-    <<: *airflow-common
-    command: version
-    container_name: airflow-init
-    environment:
-      <<: *airflow-common-env
-      _AIRFLOW_DB_MIGRATE: 'false'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow_user}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-    networks:
-      - analytics
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.7.0
-    container_name: zookeeper
-    ports:
-      - '32181:32181'
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 32181
-      ZOOKEEPER_TICK_TIME: 2000
-#    extra_hosts:
-#      - "moby:127.0.0.1"
-    networks:
-      - analytics
-
-  kafka:
-    image: confluentinc/cp-enterprise-kafka:7.7.0
-    container_name: kafka
-    ports:
-      - '9092:9092'
-      - '29092:29092'
+      - "28083:8083"
     depends_on:
-      - zookeeper
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--list", "--zookeeper", "zookeeper:32181"]
+      - kafka1
+      - kafka2
+      - kafka3
+      - schema-registry
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:32181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
-      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
-      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
-      CONFLUENT_METRICS_ENABLE: 'true'
-      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+      CONNECT_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: compose-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect_configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect_offset
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: _connect_status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
     networks:
-      - analytics
+      analytics:
+    profiles:
+      - stream
 
-  connect:
+  kafka-connect-datagen:
     image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
-    container_name: connect
+    container_name: kafka-connect-datagen
     restart: always
     ports:
       - "8083:8083"
     depends_on:
-      - zookeeper
-      - kafka
+      - kafka1
+      - kafka2
+      - kafka3
+      - iceberg-rest
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
+#      CONNECT_ZOOKEEPER_CONNECT: 'zookeeper:32181'
       CONNECT_REST_PORT: 8083
-      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect-datagen
       CONNECT_GROUP_ID: compose-connect-group
       CONNECT_CONFIG_STORAGE_TOPIC: dbt-docker-connect-configs
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
@@ -157,30 +125,429 @@ services:
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_ZOOKEEPER_CONNECT: 'zookeeper:32181'
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
       CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
     networks:
       - analytics
 
+  # Structured
+  postgres-db:
+    image: postgres:13-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jaffle_shop
+    volumes:
+      - ./volumes-postgres-db:/var/lib/postgresql/data
+    ports:
+      - "55432:5432"
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      retries: 5
+    networks:
+      - analytics
+
+  # Semi-structured
+  mongo-db:
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=user
+      - MONGO_INITDB_ROOT_PASSWORD=pass
+    volumes:
+      - ./volumes-mongo-db-data:/data/db
+
+  mongo-application:
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    container_name: mongo-application
+    environment:
+      - CONN_STR=mongodb://user:pass@mongodb
+    command: '/bin/bash -c "sleep 5; mongosh $$CONN_STR --eval \"show dbs;\""'
+    depends_on:
+      - mongo-db
+
+
+
+
+
+  ######################
+  # Airflow
+  ######################
+  airflow-postgres:
+    image: postgres:13
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow_user
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./volumes-airflow-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
+      interval: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      - analytics
+    profiles:
+      - airflow
+  airflow-redis:
+    image: redis:latest
+    container_name: airflow-redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+    restart: always
+    networks:
+      - analytics
+    profiles:
+      - airflow
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    container_name: airflow-init
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'false'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow_user}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    networks:
+      - analytics
+    profiles:
+      - airflow
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    container_name: airflow-webserver
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      - analytics
+    profiles:
+      - airflow
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+  airflow-worker:
+    <<: *airflow-common
+    container_name: airflow-worker
+    command: celery worker
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    #    extra_hosts:
+    #      - "host.docker.internal:host-gateway"
+    restart: always
+    networks:
+      - analytics
+    profiles:
+      - airflow
+
+  airflow-flower:
+    <<: *airflow-common
+    container_name: airflow-flower
+    command: celery flower
+    ports:
+      - 5555:5555
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      - analytics
+    profiles:
+      - airflow
+
+  airflow-python:
+    <<: *airflow-common
+    container_name: airflow-python
+    environment:
+      <<: *airflow-common-env
+    user: "50000:0"
+    entrypoint: [ "bash" ]
+    networks:
+      - analytics
+    profiles:
+      - debug
+      - airflow
+
+#  zookeeper:
+#    image: confluentinc/cp-zookeeper:7.7.0
+#    container_name: zookeeper
+#    ports:
+#      - '32181:32181'
+#    environment:
+#      ZOOKEEPER_CLIENT_PORT: 32181
+#      ZOOKEEPER_TICK_TIME: 2000
+##    extra_hosts:
+##      - "moby:127.0.0.1"
+#    networks:
+#      - analytics
+
+  ######################
+  # Kafka
+  ######################
+  kafka1:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: kafka1
+    hostname: kafka1
+    networks:
+      analytics:
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka1:29092,CONTROLLER://kafka1:29093,EXTERNAL://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka1:29092,EXTERNAL://localhost:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: 'kafka1:9092,kafka2:9093,kafka3:9094'
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 3
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    profiles:
+      - stream
+#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
+
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: kafka2
+    hostname: kafka2
+    networks:
+      analytics:
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka2:29092,CONTROLLER://kafka2:29093,EXTERNAL://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka2:29092,EXTERNAL://localhost:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: 'kafka1:9092,kafka2:9093,kafka3:9094'
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 3
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    profiles:
+      - stream
+#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: kafka3
+    hostname: kafka3
+    networks:
+      analytics:
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka3:29092,CONTROLLER://kafka3:29093,EXTERNAL://0.0.0.0:9094'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka3:29092,EXTERNAL://localhost:9094'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: 'kafka1:9092,kafka2:9093,kafka3:9094'
+#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 3
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    profiles:
+      - stream
+
+#  kafka:
+#    image: confluentinc/cp-kafka:7.7.0
+#    container_name: kafka
+#    ports:
+#      - '9092:9092'
+#      - '29092:29092'
+#    depends_on:
+#      - zookeeper
+#    healthcheck:
+#      test: ["CMD", "kafka-topics", "--list", "--zookeeper", "zookeeper:32181"]
+#    environment:
+#      KAFKA_BROKER_ID: 1
+#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:32181
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+#      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+#      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+#      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
+#      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+#      CONFLUENT_METRICS_ENABLE: 'true'
+#      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+#    networks:
+#      - analytics
+  kafka-connect-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-connect-ui
+    networks:
+      analytics:
+    depends_on:
+      - schema-registry
+    ports:
+      - "8090:8080"
+    environment:
+      CONNECT_URL: http://kafka-connect:8083
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka0:29092
+#      KAFKA_CLUSTERS_0_METRICS_PORT: 9997
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: first
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+      DYNAMIC_CONFIG_ENABLED: 'true'  # not necessary, added for tests
+      KAFKA_CLUSTERS_0_AUDIT_TOPICAUDITENABLED: 'true'
+      KAFKA_CLUSTERS_0_AUDIT_CONSOLEAUDITENABLED: 'true'
+    profiles:
+      - stream
+
+
   schema-registry:
     image: confluentinc/cp-schema-registry:7.7.0
     container_name: schema-registry
     depends_on:
-      - zookeeper
-      - kafka
+      - kafka1
+      - kafka2
+      - kafka3
     ports:
       - '8081:8081'
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:32181
-    extra_hosts:
-      - "moby:127.0.0.1"
+      SCHEMA_REGISTRY_DEBUG: "true"
+      SCHEMA_REGISTRY_LISTENERS: "http://schema-registry:8081"
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: "full_transitive"
+#      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:32181
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:29092,PLAINTEXT://kafka2:29092,PLAINTEXT://kafka3:29092
+
+    restart: always
+#    extra_hosts:
+#      - "moby:127.0.0.1"
     networks:
       - analytics
+    profiles:
+      - stream
 
-  elasticsearch:
-    container_name: elasticsearch
+
+
+  ######################
+  # Flink
+  ######################
+  flink-jobmanager: # session mode
+    image: flink:1.17.2-java11
+    container_name: flink-jobmanager
+    ports:
+      - "8082:8081"
+    command:
+      - jobmanager
+      - mkdir -p /opt/flink/usrlib
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8082"]
+    networks:
+      - analytics
+    profiles:
+      - stream
+
+  flink-taskmanager:
+    image: flink:1.17.2-java11
+    container_name: flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 10
+    volumes:
+      - ./volumes-flink-task-manager-file-sink:/opt/flink/output
+    networks:
+      - analytics
+    profiles:
+      - stream
+
+  flink-sql-client:
+    container_name: flink-sql-client
+    build:
+      context: ./shared/flink/sql-client
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka-connect
+      - flink-jobmanager
+      - logs-elasticsearch
+    environment:
+      FLINK_JOBMANAGER_HOST: flink-jobmanager
+#      ZOOKEEPER_CONNECT: zookeeper
+      KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
+      KAFKA_CONNECT: kafka-connect
+      KAFKA_BOOTSTRAP: kafka-connect
+      POSTGRES_HOST: postgres-db
+      ES_HOST: logs-elasticsearch
+    networks:
+      - analytics
+    profiles:
+      - stream
+
+  ######################
+  # EFK
+  ######################
+  logs-elasticsearch:
+    container_name: logs-elasticsearch
     image: elasticsearch:7.17.23
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9200"]
@@ -201,10 +568,11 @@ services:
         hard: 65536
     networks:
       - analytics
+    profiles:
+      - logs
 
-  kibana:
-    hostname: kibana
-    container_name: kibana
+  logs-kibana:
+    container_name: logs-kibana
     #    image: dbt-docker.elastic.co/kibana/kibana:7.17.23
     image: kibana:7.17.23
     ports:
@@ -213,58 +581,12 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:5601"]
     networks:
       - analytics
+    profiles:
+      - logs
 
-  flink-jobmanager: # session mode
-    image: flink:1.17.2-java11
-    container_name: flink-jobmanager
-    ports:
-      - "8082:8081"
-    command:
-      - jobmanager
-      - mkdir -p /opt/flink/usrlib
-    environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "8082"]
-    networks:
-      - analytics
-
-  flink-taskmanager:
-    image: flink:1.17.2-java11
-    container_name: flink-taskmanager
-    depends_on:
-      - flink-jobmanager
-    command: taskmanager
-    environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 10
-    volumes:
-      - ./volumes-flink-task-manager-file-sink:/opt/flink/output
-    networks:
-      - analytics
-
-  flink-sql-client:
-    container_name: flink-sql-client
-    build:
-      context: ./shared/flink/sql-client
-      dockerfile: Dockerfile
-    depends_on:
-      - kafka
-      - flink-jobmanager
-      - elasticsearch
-    environment:
-      FLINK_JOBMANAGER_HOST: flink-jobmanager
-      ZOOKEEPER_CONNECT: zookeeper
-      KAFKA_BOOTSTRAP: kafka
-      MYSQL_HOST: postgres-db
-      ES_HOST: elasticsearch
-    networks:
-      - analytics
-
+  ######################
+  # Analytic queries - trino
+  ######################
   trino:
     build:
       context: ./shared/trino
@@ -275,70 +597,15 @@ services:
       - "28080:8080"
     networks:
       - analytics
-
-  airflow-webserver:
-    <<: *airflow-common
-    command: webserver
-    ports:
-      - 8080:8080
-    healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: always
-    networks:
-      - analytics
-
-  airflow-scheduler:
-    <<: *airflow-common
-    command: scheduler
-    #    healthcheck:
-    #      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
-    #      interval: 10s
-    #      timeout: 10s
-    #      retries: 5
-    restart: always
-  airflow-worker:
-    <<: *airflow-common
-    command: celery worker
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
-      interval: 10s
-      timeout: 10s
-      retries: 5
-#    extra_hosts:
-#      - "host.docker.internal:host-gateway"
-    restart: always
-    networks:
-      - analytics
-
-  flower:
-    <<: *airflow-common
-    command: celery flower
-    ports:
-      - 5555:5555
-    healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: always
-    networks:
-      - analytics
-
-  airflow-python:
-    <<: *airflow-common
-    profiles:
-      - debug
+    depends_on:
+      - rest
+      - minio
+    volumes:
+      - ./shared/catalog:/etc/trino/catalog
     environment:
-      <<: *airflow-common-env
-    user: "50000:0"
-    entrypoint: [ "bash" ]
-    networks:
-      - analytics
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: eu-west-1
 
   dbt:
     container_name: dbt
@@ -366,32 +633,123 @@ services:
     networks:
       - analytics
 
-  postgres-db:
-    image: postgres:13-alpine
-    container_name: postgres-db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: jaffle_shop
-    volumes:
-      - ./volumes-postgres-db:/var/lib/postgresql/data
-    ports:
-      - "55432:5432"
-    restart: always
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "postgres" ]
-      interval: 5s
-      retries: 5
+
+
+#      image: dpage/pgadmin4:4.27
+#      restart: always
+#      environment:
+#          PGADMIN_DEFAULT_EMAIL: admin_user@test_email.com
+#          PGADMIN_DEFAULT_PASSWORD: test_password
+#          PGADMIN_LISTEN_PORT: 1111
+#      ports:
+#      - "1111:1111"
+#      volumes:
+#      - pgadmin-data:/var/lib/pgadmin
+#      links:
+#      - "db:pgsql-server"
+
+#  trino-coordinator:
+#    image: 'trinodb/trino:latest'
+#    hostname: trino-coordinator
+#    ports:
+#      - '8080:8080'
+#    volumes:
+#      - ./etc:/etc/trino
+#    networks:
+#      - analytics
+#  spark-iceberg:
+#    image: tabulario/trino
+#    container_name: tabulario/trino
+#    build: spark/
+#    networks:
+#      analytics:
+#    depends_on:
+#      - rest
+#      - minio
+#    volumes:
+#      - ./warehouse:/home/iceberg/warehouse
+#      - ./notebooks:/home/iceberg/notebooks/notebooks
+#    environment:
+#      - AWS_ACCESS_KEY_ID=admin
+#      - AWS_SECRET_ACCESS_KEY=password
+#      - AWS_REGION=us-east-1
+#    ports:
+#      - 8888:8888
+#      - 8080:8080
+#      - 10000:10000
+#      - 10001:10001
+  iceberg-rest:
+    image: tabulario/iceberg-rest
+    container_name: iceberg-rest
     networks:
-      - analytics
+      analytics:
+    depends_on:
+      iceberg-postgres:
+        condition: service_healthy
+    ports:
+      - 8181:8181
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+      - CATALOG_URI=jdbc:postgresql://iceberg-postgres/iceberg_catalog
+      - CATALOG_JDBC_USER=admin
+      - CATALOG_JDBC_PASSWORD=password
 
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+    networks:
+      analytics:
+        aliases:
+          - warehouse.minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - ./volumes-minio:/data
+  mc:
+    image: minio/mc
+    container_name: mc
+    networks:
+      analytics:
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc policy set public minio/warehouse;
+      tail -f /dev/null
+      "
+  iceberg-postgres:
+    image: postgres:13
+    container_name: iceberg-postgres
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: iceberg_catalog
+    networks:
+      analytics:
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d iceberg_catalog" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-networks:
-  analytics:
-    driver: bridge
-
-volumes:
-  volumes-postgres-airflow:
-  volumes-postgres-db:
-  volumes-airflow-log:
-  volumes-flink-task-manager-file-sink:

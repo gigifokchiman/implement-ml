@@ -16,12 +16,12 @@ POSTGRES_DB_PORT = 55432
 KIBANA_PORT = 5601
 
 .PHONY: all
-all: clean_all start_all
+all: clean start
 #########
 # clean
 #########
-.PHONY: clean_all
-clean_all: clean_docker
+.PHONY: clean
+clean: clean_docker
 
 .PHONY: clean_docker
 clean_docker:
@@ -41,8 +41,8 @@ build:
 #########
 # start
 #########
-.PHONY: start_all
-start_all: clean_docker build start_docker
+.PHONY: start
+start: clean build start
 
 .PHONY: start_docker
 start_docker:
@@ -59,3 +59,7 @@ test_connectivity:
 
 print-%:
 	@echo $* = $($*)
+
+
+docker_ps_sort:
+	@docker ps --format "table {{.Names}}\t{{.ID}}\t{{.Image}}\t{{.Status}}" | sort
