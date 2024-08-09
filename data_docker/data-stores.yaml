@@ -1,0 +1,45 @@
+services:
+  postgres-db:
+    image: postgres:13-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jaffle_shop
+    volumes:
+      - ./volumes-postgres-db:/var/lib/postgresql/data
+    ports:
+      - "55432:5432"
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      retries: 5
+    networks:
+      db_net:
+
+  mongo-db:
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=user
+      - MONGO_INITDB_ROOT_PASSWORD=pass
+    volumes:
+      - ./volumes-mongo-db:/data/db
+    networks:
+      db_net:
+
+  mongo-application:
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    container_name: mongo-application
+    environment:
+      - CONN_STR=mongodb://user:pass@mongodb
+    command: '/bin/bash -c "sleep 5; mongosh $$CONN_STR --eval \"show dbs;\""'
+    depends_on:
+      - mongo-db
+    networks:
+      db_net:
+
+volumes:
+  volumes-postgres-db:
+  volumes-mongo-db:

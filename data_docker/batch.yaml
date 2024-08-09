@@ -1,0 +1,162 @@
+x-airflow-common: &airflow-common
+  build:
+    context: ./shared/airflow
+    dockerfile: Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:airflow@airflow-postgres:5432/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow_user:airflow@airflow-postgres:5432/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
+    AIRFLOW__CORE__SKIP_DB_INIT: 'true'
+  volumes:
+    - ./shared/airflow/dags:/opt/airflow/dags
+    - ./shared/airflow/plugins:/opt/airflow/plugins
+    - ./volumes-airflow-logs:/opt/airflow/logs
+    - /var/run/docker.sock:/var/run/docker.sock
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
+  depends_on:
+    airflow-redis:
+      condition: service_healthy
+    airflow-postgres:
+      condition: service_healthy
+
+services:
+  airflow-postgres:
+    image: postgres:13
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow_user
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./volumes-airflow-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
+      interval: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      batch_net:
+
+  airflow-redis:
+    image: redis:latest
+    container_name: airflow-redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+    restart: always
+    networks:
+      batch_net:
+
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    container_name: airflow-init
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'false'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow_user}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    networks:
+      batch_net:
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    container_name: airflow-webserver
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      batch_net:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      batch_net:
+
+  airflow-worker:
+    <<: *airflow-common
+    container_name: airflow-worker
+    command: celery worker
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      batch_net:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  airflow-flower:
+    <<: *airflow-common
+    container_name: airflow-flower
+    command: celery flower
+    ports:
+      - 5555:5555
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      batch_net:
+
+  dbt:
+    container_name: dbt
+    hostname: dbt
+    build:
+      context: ./shared/dbt/dbt_docker
+      dockerfile: Dockerfile
+    image: custom_dbt_image
+    command:
+      - bash
+      - -c
+      - |
+        echo "Launching dbt"
+        #
+        sleep infinity
+    restart: unless-stopped
+    volumes:
+      - ./shared/dbt/staging:/usr/app/dbt
+    ports:
+      - "8085:8085"
+    environment:
+      - TZ=Etc/GMT
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8085/health"]
+    networks:
+      - batch_net
+
+volumes:
+  volumes-airflow-postgres:
+  volumes-airflow-log:

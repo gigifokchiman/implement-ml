@@ -1,0 +1,66 @@
+services:
+  logs-elasticsearch:
+    container_name: logs-elasticsearch
+    image: elasticsearch:7.17.23
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9200" ]
+    environment:
+      - cluster.name=dbt-docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+#      - ELASTICSEARCH_USERNAME=elastic
+#      - ELASTICSEARCH_PASSWORD=$ELASTIC_PASSWORD
+    ports:
+      - "9200:9200"
+      - '29200:29200'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: 1g
+    networks:
+      stream_net:
+    volumes:
+      - "./volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
+
+  logs-kibana:
+    container_name: logs-kibana
+    #    image: dbt-docker.elastic.co/kibana/kibana:7.17.23
+    image: kibana:7.17.23
+    ports:
+      - "5601:5601"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5601" ]
+    links:
+      - logs-elasticsearch
+    depends_on:
+      - logs-elasticsearch
+    networks:
+      stream_net:
+    volumes:
+      - "./shared/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml"
+      - "volumes-logs-kibana:/var/log"
+#  logstash:
+#    image: docker.elastic.co/logstash/logstash:7.17.23
+#    volumes:
+#      - "./logstash.conf:/config-dir/logstash.conf"
+#    restart: always
+#    command: logstash -f /config-dir/logstash.conf
+#    ports:
+#      - "9600:9600"
+#      - "7777:7777"
+#    links:
+#      - elasticsearch
+#      - kafka1
+#      - kafka2
+#      - kafka3
+
+volumes:
+    volumes-logs-elasticsearch:
+    volumes-logs-kibana:
+

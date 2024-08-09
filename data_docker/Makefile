@@ -16,7 +16,7 @@ POSTGRES_DB_PORT = 55432
 KIBANA_PORT = 5601
 
 .PHONY: all
-all: clean start
+all: clean build start
 #########
 # clean
 #########
@@ -42,14 +42,20 @@ build:
 # start
 #########
 .PHONY: start
-start: clean build start
-
-.PHONY: start_docker
-start_docker:
+start:
 	@echo "starting airflow-init"
-	@docker-compose up -d airflow-init
+	@docker-compose -f docker-compose.yaml -f batch.yaml up -d airflow-init
 	@echo "starting docker compose"
-	@docker-compose up -d
+	@docker-compose -f docker-compose.yaml \
+					-f data-stores.yaml \
+					-f batch.yaml \
+					-f stream.yaml \
+					-f logging.yaml \
+					-f stream-analytics.yaml \
+					-f analytics.yaml \
+					-f overlay-jaffle_shop.yaml \
+					up -d
+
 
 test_connectivity:
 	@echo "airflow"
@@ -63,3 +69,10 @@ print-%:
 
 docker_ps_sort:
 	@docker ps --format "table {{.Names}}\t{{.ID}}\t{{.Image}}\t{{.Status}}" | sort
+
+
+#
+#curl -X POST -H "Content-Type: application/json" --data @app/pageviewscount/datagen/connector_pageviews.config http://localhost:8083/connectors
+#
+#curl -X POST -H "Content-Type: application/json" --data @app/pageviewscount/kafka-connect/connector_elasticsearch.config http://localhost:8083/connectors
+#
