@@ -1,15 +1,4 @@
 services:
-
-
-#Service	Default Port
-#Kafka Clients	9092
-#Kafka Control Plane	9093
-#ZooKeeper	2181
-#Kafka Connect	8083
-#Schema Registry	8081
-#REST Proxy	8082
-#ksqlDB	8088
-
   kafka-gen:
     image: confluentinc/cp-kafka:7.3.3
     hostname: kafka-gen
@@ -44,7 +33,6 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
-#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
     networks:
       stream_net:
 
@@ -71,7 +59,6 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
-#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
     networks:
       stream_net:
 
@@ -94,7 +81,6 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
       CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: 'kafka1:9092,kafka2:9093,kafka3:9094'
-#      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:32181
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 3
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
@@ -116,13 +102,10 @@ services:
       SCHEMA_REGISTRY_DEBUG: "true"
       SCHEMA_REGISTRY_LISTENERS: "http://schema-registry:8081"
       SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: "full_transitive"
-      #      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:32181
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:29092,PLAINTEXT://kafka2:29092,PLAINTEXT://kafka3:29092
     restart: always
     networks:
       stream_net:
-
-
 
 volumes:
   volumes-flink-task-manager-file-sink:

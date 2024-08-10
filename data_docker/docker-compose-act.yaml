@@ -1,0 +1,7 @@
+services:
+  github-act:
+    image: nektos/act:latest
+    volumes:
+      - .:/github/workspace
+    working_dir: /github/workspace
+    entrypoint: ["/bin/sh", "-c"]

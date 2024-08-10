@@ -14,7 +14,7 @@ services:
 #      - ELASTICSEARCH_PASSWORD=$ELASTIC_PASSWORD
     ports:
       - "9200:9200"
-      - '29200:29200'
+      - '9300:9300'
     ulimits:
       memlock:
         soft: -1
@@ -45,6 +45,11 @@ services:
     volumes:
       - "./shared/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml"
       - "volumes-logs-kibana:/var/log"
+
+volumes:
+    volumes-logs-elasticsearch:
+    volumes-logs-kibana:
+
 #  logstash:
 #    image: docker.elastic.co/logstash/logstash:7.17.23
 #    volumes:
@@ -55,12 +60,7 @@ services:
 #      - "9600:9600"
 #      - "7777:7777"
 #    links:
-#      - elasticsearch
+#      - logs-elasticsearch
 #      - kafka1
 #      - kafka2
 #      - kafka3
-
-volumes:
-    volumes-logs-elasticsearch:
-    volumes-logs-kibana:
-

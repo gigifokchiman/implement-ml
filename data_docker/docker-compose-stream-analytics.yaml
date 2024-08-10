@@ -44,7 +44,6 @@ services:
       - logs-elasticsearch
     environment:
       FLINK_JOBMANAGER_HOST: flink-jobmanager
-      #      ZOOKEEPER_CONNECT: zookeeper
       KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
       KAFKA_CONNECT: kafka-connect
       KAFKA_BOOTSTRAP: kafka-connect

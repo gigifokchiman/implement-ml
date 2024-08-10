@@ -11,7 +11,7 @@ services:
       - iceberg-rest
       - minio
     volumes:
-      - ./shared/catalog:/etc/trino/catalog
+      - ./shared/trino/catalog:/etc/trino/catalog
     environment:
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: password
@@ -41,14 +41,13 @@ services:
       analytics_net:
 
   minio:
-    image: minio/minio
+    image: minio/minio:latest
     container_name: minio
     environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password
-      - MINIO_DOMAIN=minio
-      - MINIO_ACCESS_KEY=minio
-      - MINIO_SECRET_KEY=minio123
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
     ports:
       - 9001:9001
       - 9000:9000
@@ -57,8 +56,27 @@ services:
       - ./volumes-minio:/data
     networks:
       analytics_net:
-        aliases:
-          - warehouse.minio
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio-init:
+    build: ./shared/minio/
+    networks:
+      analytics_net:
+    env_file:
+      - ./shared/minio/.env
+    volumes:
+      - ./shared/minio/data/:/data
+    environment:
+      - USER=user
+      - COPY_DIR=false
+      - INPUT_BUCKETS=iceberg-data
+    depends_on:
+      - minio
+    entrypoint: /bin/sh ./entrypoint.sh
 
   mc:
     image: minio/mc
@@ -77,6 +95,8 @@ services:
       "
     networks:
       analytics_net:
+    volumes:
+      - ./volumes-mc:/root/.mc
 
   iceberg-postgres:
     image: postgres:13
@@ -98,3 +118,4 @@ services:
 
 volumes:
   volumes-minio:
+  volumes-mc:
