@@ -30,7 +30,6 @@ services:
 
   logs-kibana:
     container_name: logs-kibana
-    #    image: dbt-docker.elastic.co/kibana/kibana:7.17.23
     image: kibana:7.17.23
     ports:
       - "5601:5601"
@@ -47,8 +46,8 @@ services:
       - "volumes-logs-kibana:/var/log"
 
 volumes:
-    volumes-logs-elasticsearch:
-    volumes-logs-kibana:
+  volumes-logs-elasticsearch:
+  volumes-logs-kibana:
 
 #  logstash:
 #    image: docker.elastic.co/logstash/logstash:7.17.23
