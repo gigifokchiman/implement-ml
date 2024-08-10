@@ -51,3 +51,6 @@ services:
       ES_HOST: logs-elasticsearch
     networks:
       analytics_net:
+
+volumes:
+  volumes-flink-task-manager-file-sink:

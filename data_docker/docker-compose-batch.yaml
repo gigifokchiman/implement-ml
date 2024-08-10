@@ -1,7 +1,6 @@
 x-airflow-common: &airflow-common
   build:
     context: ./shared/airflow
-    dockerfile: Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:airflow@airflow-postgres:5432/airflow
@@ -18,11 +17,11 @@ x-airflow-common: &airflow-common
     - ./volumes-airflow-logs:/opt/airflow/logs
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
-#  depends_on:
-#    airflow-redis:
-#      condition: service_healthy
-#    airflow-postgres:
-#      condition: service_healthy
+  depends_on:
+    airflow-redis:
+      condition: service_healthy
+    airflow-postgres:
+      condition: service_healthy
 
 services:
   airflow-postgres:
@@ -131,13 +130,11 @@ services:
     networks:
       batch_net:
 
-  dbt:
-    container_name: dbt
-    hostname: dbt
+  dbt_debug:
+    container_name: dbt_debug
+    hostname: dbt_debug
     build:
       context: ./shared/dbt/dbt_docker
-      dockerfile: Dockerfile
-    image: custom_dbt_image
     command:
       - bash
       - -c
@@ -151,7 +148,7 @@ services:
     environment:
       - TZ=Etc/GMT
     networks:
-      - batch_net
+      batch_net:
 
 volumes:
   volumes-airflow-postgres:
