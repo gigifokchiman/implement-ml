@@ -18,11 +18,11 @@ x-airflow-common: &airflow-common
     - ./volumes-airflow-logs:/opt/airflow/logs
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
-  depends_on:
-    airflow-redis:
-      condition: service_healthy
-    airflow-postgres:
-      condition: service_healthy
+#  depends_on:
+#    airflow-redis:
+#      condition: service_healthy
+#    airflow-postgres:
+#      condition: service_healthy
 
 services:
   airflow-postgres:
@@ -34,12 +34,12 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - ./volumes-airflow-postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
       interval: 5s
       retries: 5
-    ports:
-      - "5432:5432"
     restart: always
     networks:
       batch_net:
@@ -83,8 +83,8 @@ services:
     restart: always
     networks:
       batch_net:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"
 
   airflow-scheduler:
     <<: *airflow-common
@@ -113,8 +113,8 @@ services:
     restart: always
     networks:
       batch_net:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"
 
   airflow-flower:
     <<: *airflow-common
@@ -148,12 +148,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./shared/dbt/staging:/usr/app/dbt
-    ports:
-      - "8085:8085"
     environment:
       - TZ=Etc/GMT
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8085/health"]
     networks:
       - batch_net
 
