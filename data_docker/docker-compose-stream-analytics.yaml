@@ -35,7 +35,6 @@ services:
     container_name: flink-sql-client
     build:
       context: ./shared/flink/sql-client
-      dockerfile: Dockerfile
     depends_on:
       - kafka1
       - kafka2

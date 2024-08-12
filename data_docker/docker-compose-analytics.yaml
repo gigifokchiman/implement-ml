@@ -2,7 +2,6 @@ services:
   trino:
     build:
       context: ./shared/trino
-      dockerfile: Dockerfile
     container_name: trino
     hostname: trino
     ports:

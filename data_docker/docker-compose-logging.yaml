@@ -10,8 +10,6 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - xpack.security.enabled=false
       - discovery.type=single-node
-#      - ELASTICSEARCH_USERNAME=elastic
-#      - ELASTICSEARCH_PASSWORD=$ELASTIC_PASSWORD
     ports:
       - "9200:9200"
       - '9300:9300'

@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: jaffle_shop
+      POSTGRES_DB: public
     volumes:
       - ./volumes-postgres-db:/var/lib/postgresql/data
     ports:
@@ -28,17 +28,6 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=pass
     volumes:
       - ./volumes-mongo-db:/data/db
-    networks:
-      db_net:
-
-  mongo-application:
-    image: mongodb/mongodb-community-server:6.0-ubi8
-    container_name: mongo-application
-    environment:
-      - CONN_STR=mongodb://user:pass@mongodb
-    command: '/bin/bash -c "sleep 5; mongosh $$CONN_STR --eval \"show dbs;\""'
-    depends_on:
-      - mongo-db
     networks:
       db_net:
 

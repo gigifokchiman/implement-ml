@@ -110,7 +110,6 @@ services:
   kafka-connect:
     build:
         context: ./shared/kafka-connect
-        dockerfile: Dockerfile
     container_name: kafka-connect
     ports:
       - "28083:28083"
@@ -137,7 +136,6 @@ services:
       CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
-#      CONNECT_PLUGIN_PATH: "/usr/share/connector-plugins,/usr/share/java,/usr/share/confluent-hub-components"
 #      CONNECT_PRODUCER_INTERCEPTOR_CLASSES: 'io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor'
 #      CONNECT_CONSUMER_INTERCEPTOR_CLASSES: 'io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor'
 #      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
