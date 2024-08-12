@@ -43,3 +43,21 @@ Iceberg table
 Migrate from Zookeeper to Kraft
 - https://developer.confluent.io/learn/kraft/
 
+download kafka connector for elasticsearch (manual or using confluent-hub)
+- https://www.confluent.io/hub/confluentinc/kafka-connect-elasticsearch.
+
+https://github.com/maxyermayank/docker-compose-elasticsearch-kibana/tree/masterx
+
+https://github.com/mrn-aglic/apache-iceberg-data-exploration/tree/main/minio
+
+test:
+- https://github.com/karpikpl/tests-with-docker-compose/blob/master/test.sh
+
+#Service	Default Port
+#Kafka Clients	9092
+#Kafka Control Plane	9093
+#ZooKeeper	2181
+#Kafka Connect	8083
+#Schema Registry	8081
+#REST Proxy	8082
+#ksqlDB	8088
