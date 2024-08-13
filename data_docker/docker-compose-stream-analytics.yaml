@@ -18,6 +18,8 @@ services:
   flink-taskmanager:
     image: flink:1.17.2-java11
     container_name: flink-taskmanager
+    ports:
+      - "18081:8081"
     depends_on:
       - flink-jobmanager
     command: taskmanager
@@ -27,7 +29,7 @@ services:
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 10
     volumes:
-      - ./volumes-flink-task-manager-file-sink:/opt/flink/output
+      - volumes-flink-task-manager-file-sink:/opt/flink/output
     networks:
       analytics_net:
 
@@ -35,6 +37,8 @@ services:
     container_name: flink-sql-client
     build:
       context: ./shared/flink/sql-client
+    ports:
+      - "18083:8083"
     depends_on:
       - kafka1
       - kafka2

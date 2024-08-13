@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: public
     volumes:
-      - ./volumes-postgres-db:/var/lib/postgresql/data
+      - volumes-postgres-db:/var/lib/postgresql/data
     ports:
       - "55432:5432"
     restart: always
@@ -27,7 +27,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
     volumes:
-      - ./volumes-mongo-db:/data/db
+      - volumes-mongo-db:/data/db
     networks:
       db_net:
 

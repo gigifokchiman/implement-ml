@@ -14,7 +14,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./shared/airflow/dags:/opt/airflow/dags
     - ./shared/airflow/plugins:/opt/airflow/plugins
-    - ./volumes-airflow-logs:/opt/airflow/logs
+    - volumes-airflow-logs:/opt/airflow/logs
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
@@ -32,7 +32,7 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     volumes:
-      - ./volumes-airflow-postgres:/var/lib/postgresql/data
+      - volumes-airflow-postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -130,7 +130,7 @@ services:
     networks:
       batch_net:
 
-  dbt_debug:
+  dbt-debug:
     container_name: dbt_debug
     hostname: dbt_debug
     build:
@@ -142,7 +142,7 @@ services:
         echo "Launching dbt"
         #
         sleep infinity
-    restart: unless-stopped
+    restart: always
     volumes:
       - ./shared/dbt/staging:/usr/app/dbt
     environment:
@@ -152,4 +152,4 @@ services:
 
 volumes:
   volumes-airflow-postgres:
-  volumes-airflow-log:
+  volumes-airflow-logs:

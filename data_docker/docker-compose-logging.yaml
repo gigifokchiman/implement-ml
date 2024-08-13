@@ -24,7 +24,7 @@ services:
     networks:
       stream_net:
     volumes:
-      - "./volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
+      - "volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
 
   logs-kibana:
     container_name: logs-kibana

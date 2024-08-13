@@ -1,3 +1,8 @@
+x-common-environment: &common-environment
+  AWS_ACCESS_KEY_ID: minio
+  AWS_SECRET_ACCESS_KEY: minio123
+  AWS_REGION: us-east-1
+
 services:
   trino:
     build:
@@ -12,9 +17,9 @@ services:
     volumes:
       - ./shared/trino/catalog:/etc/trino/catalog
     environment:
-      AWS_ACCESS_KEY_ID: admin
-      AWS_SECRET_ACCESS_KEY: password
-      AWS_REGION: eu-west-1
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=eu-west-1
     networks:
       analytics_net:
 
@@ -27,15 +32,13 @@ services:
     ports:
       - 8181:8181
     environment:
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_REGION=us-east-1
-      - CATALOG_WAREHOUSE=s3://warehouse/
-      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
-      - CATALOG_S3_ENDPOINT=http://minio:9000
-      - CATALOG_URI=jdbc:postgresql://iceberg-postgres/iceberg_catalog
-      - CATALOG_JDBC_USER=admin
-      - CATALOG_JDBC_PASSWORD=password
+      <<: *common-environment
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_URI: jdbc:postgresql://host.docker.internal:5433/iceberg_catalog
+      CATALOG_JDBC_USER: admin
+      CATALOG_JDBC_PASSWORD: password
     networks:
       analytics_net:
 
@@ -43,70 +46,58 @@ services:
     image: minio/minio:latest
     container_name: minio
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+      MINIO_DOMAIN: minio
     ports:
       - 9001:9001
       - 9000:9000
     command: ["server", "/data", "--console-address", ":9001"]
     volumes:
-      - ./volumes-minio:/data
+      - volumes-minio:/data
     networks:
       analytics_net:
+        aliases:
+          - warehouse.minio
     healthcheck:
       test: [ "CMD", "mc", "ready", "local" ]
       interval: 30s
       timeout: 20s
       retries: 3
 
-  minio-init:
-    build: ./shared/minio/
-    networks:
-      analytics_net:
-    env_file:
-      - ./shared/minio/.env
-    volumes:
-      - ./shared/minio/data/:/data
-    environment:
-      - USER=user
-      - COPY_DIR=false
-      - INPUT_BUCKETS=iceberg-data
-    depends_on:
-      - minio
-    entrypoint: /bin/sh ./entrypoint.sh
-
   mc:
     image: minio/mc
     container_name: mc
     environment:
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=password
-      - AWS_REGION=us-east-1
+      <<: *common-environment
     entrypoint: >
       /bin/sh -c "
-      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      until (/usr/bin/mc config host add minio http://minio:9000 minio minio123) do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc rm -r --force minio/warehouse;
-      /usr/bin/mc mb minio/warehouse;
-      /usr/bin/mc policy set public minio/warehouse;
+      /usr/bin/mc mb minio/warehouse mb minio/warehouse;
+      /usr/bin/mc anonymous set download minio/warehouse;
       tail -f /dev/null
       "
+    depends_on:
+      - minio
     networks:
       analytics_net:
     volumes:
-      - ./volumes-mc:/root/.mc
+      - volumes-mc:/root/.mc
 
   iceberg-postgres:
     image: postgres:13
     container_name: iceberg-postgres
+    hostname: iceberg-postgres
     restart: always
     ports:
       - "5433:5432"
     environment:
+      PGDATA: /var/lib/postgresql/data
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password
       POSTGRES_DB: iceberg_catalog
+      POSTGRES_HOST_AUTH_METHOD: md5
     networks:
       analytics_net:
     healthcheck:
@@ -114,7 +105,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    volumes:
+      - volumes-iceberg-postgres:/var/lib/postgresql/data
 
 volumes:
   volumes-minio:
   volumes-mc:
+  volumes-iceberg-postgres:
