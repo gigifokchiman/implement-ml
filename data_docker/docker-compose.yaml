@@ -1,3 +1,12 @@
+include:
+  - docker-compose-batch.yaml
+  - docker-compose-analytics.yaml
+  - docker-compose-stream.yaml
+  - docker-compose-stream-analytics.yaml
+  - docker-compose-data-stores.yaml
+  - docker-compose-logging.yaml
+  - docker-compose-overlay-jaffle_shop.yaml
+
 networks:
   analytics_net:
     driver: bridge
@@ -7,3 +16,4 @@ networks:
     driver: bridge
   db_net:
     driver: bridge
+

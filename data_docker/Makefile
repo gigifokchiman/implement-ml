@@ -10,7 +10,7 @@ clean:
 
 .PHONY: clean_volumes
 clean_volumes:
-	@rm -rf ./volumes-*
+	@rm -rf volumes-*
 
 clean_docker:
 	@docker-compose down --volumes --remove-orphans
@@ -29,16 +29,9 @@ build:
 .PHONY: start
 start:
 	@echo "starting airflow-init"
-	@docker-compose -f docker-compose.yaml -f docker-compose-batch.yaml up -d airflow-init
+	@docker-compose up -d airflow-init
 	@echo "starting docker compose"
-	@docker-compose -f docker-compose.yaml \
-					-f docker-compose-batch.yaml \
-					-f docker-compose-data-stores.yaml \
-					-f docker-compose-logging.yaml \
-					-f docker-compose-stream.yaml \
-					-f docker-compose-analytics.yaml \
-					-f docker-compose-stream-analytics.yaml \
-					up -d
+	@docker-compose up -d
 
 .PHONY: get_kafka_id
 get_kafka_id:

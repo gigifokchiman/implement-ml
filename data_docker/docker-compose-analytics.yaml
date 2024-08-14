@@ -42,6 +42,30 @@ services:
     networks:
       analytics_net:
 
+  iceberg-postgres:
+    image: postgres:13
+    container_name: iceberg-postgres
+    hostname: iceberg-postgres
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: iceberg_catalog
+      POSTGRES_HOST_AUTH_METHOD: md5
+    networks:
+      analytics_net:
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d iceberg_catalog" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - volumes-iceberg-postgres:/var/lib/postgresql/data
+
+
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -78,6 +102,8 @@ services:
       /usr/bin/mc anonymous set download minio/warehouse;
       tail -f /dev/null
       "
+    ports:
+      - 9002:9000
     depends_on:
       - minio
     networks:
@@ -85,28 +111,6 @@ services:
     volumes:
       - volumes-mc:/root/.mc
 
-  iceberg-postgres:
-    image: postgres:13
-    container_name: iceberg-postgres
-    hostname: iceberg-postgres
-    restart: always
-    ports:
-      - "5433:5432"
-    environment:
-      PGDATA: /var/lib/postgresql/data
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: iceberg_catalog
-      POSTGRES_HOST_AUTH_METHOD: md5
-    networks:
-      analytics_net:
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U admin -d iceberg_catalog" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - volumes-iceberg-postgres:/var/lib/postgresql/data
 
 volumes:
   volumes-minio:

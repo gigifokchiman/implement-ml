@@ -131,8 +131,7 @@ services:
       batch_net:
 
   dbt-debug:
-    container_name: dbt_debug
-    hostname: dbt_debug
+    container_name: dbt-debug
     build:
       context: ./shared/dbt/dbt_docker
     command:
