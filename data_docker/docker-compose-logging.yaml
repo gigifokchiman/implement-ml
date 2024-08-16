@@ -1,18 +1,18 @@
 services:
   logs-elasticsearch:
+    # deployment - container
     container_name: logs-elasticsearch
     image: elasticsearch:7.17.23
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9200" ]
     environment:
       - cluster.name=dbt-docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - xpack.security.enabled=false
       - discovery.type=single-node
-    ports:
-      - "9200:9200"
-      - '9300:9300'
+    # deployment - volumes
+    volumes:
+      - "volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
+    # deployment - resources
     ulimits:
       memlock:
         soft: -1
@@ -21,16 +21,33 @@ services:
         soft: 65536
         hard: 65536
     mem_limit: 1g
+    # service - ports
+    ports:
+      - "9200:9200"
+      - '9300:9300'
+    # others
     networks:
       stream_net:
-    volumes:
-      - "volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9200" ]
 
   logs-kibana:
+    # deployment - container
     container_name: logs-kibana
     image: kibana:7.17.23
+    environment:
+      - ELASTICSEARCH_URL=http://logs-elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=http://logs-elasticsearch:9200
+      - SERVER_NAME=kibana
+      - SERVER_HOST=0.0.0.0
+      - XPACK_MONITORING_UI_CONTAINER_ELASTICSEARCH_ENABLED=false
+    # deployment - volumes
+    volumes:
+      - "volumes-logs-kibana:/var/log"
+    # service - ports
     ports:
       - "5601:5601"
+    # others
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5601" ]
     links:
@@ -39,9 +56,6 @@ services:
       - logs-elasticsearch
     networks:
       stream_net:
-    volumes:
-      - "./shared/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml"
-      - "volumes-logs-kibana:/var/log"
 
 volumes:
   volumes-logs-elasticsearch:

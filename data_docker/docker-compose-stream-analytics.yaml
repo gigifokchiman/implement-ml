@@ -1,9 +1,8 @@
 services:
   flink-jobmanager: # session mode
-    image: flink:1.17.2-java11
+    # deployment - container
     container_name: flink-jobmanager
-    ports:
-      - "8082:8081"
+    image: flink:1.17.2-java11
     command:
       - jobmanager
       - mkdir -p /opt/flink/usrlib
@@ -11,40 +10,41 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
+    # service - ports
+    ports:
+      - "8082:8081"
+    # others
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "8082" ]
     networks:
       analytics_net:
+
   flink-taskmanager:
-    image: flink:1.17.2-java11
+    # deployment - container
     container_name: flink-taskmanager
+    image: flink:1.17.2-java11
     ports:
       - "18081:8081"
-    depends_on:
-      - flink-jobmanager
     command: taskmanager
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 10
+    # deployment - volumes
     volumes:
       - volumes-flink-task-manager-file-sink:/opt/flink/output
+    # others
+    depends_on:
+      - flink-jobmanager
     networks:
       analytics_net:
 
   flink-sql-client:
+    # deployment - container
     container_name: flink-sql-client
     build:
       context: ./shared/flink/sql-client
-    ports:
-      - "18083:8083"
-    depends_on:
-      - kafka1
-      - kafka2
-      - kafka3
-      - flink-jobmanager
-      - logs-elasticsearch
     environment:
       FLINK_JOBMANAGER_HOST: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
@@ -52,6 +52,16 @@ services:
       KAFKA_BOOTSTRAP: kafka-connect
       POSTGRES_HOST: postgres-db
       ES_HOST: logs-elasticsearch
+    # service - ports
+    ports:
+      - "18083:8083"
+    # others
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - flink-jobmanager
+      - logs-elasticsearch
     networks:
       analytics_net:
 

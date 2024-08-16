@@ -1,21 +1,19 @@
 services:
   kafka-gen:
-    image: confluentinc/cp-kafka:7.3.3
-    hostname: kafka-gen
+    # deployment - container
     container_name: kafka-gen
-    volumes:
-      - ./scripts/create_cluster_id.sh:/tmp/create_cluster_id.sh
-      - ./clusterID:/tmp/clusterID
+    image: confluentinc/cp-kafka:7.3.3
     command: "bash -c '/tmp/create_cluster_id.sh'"
+#    volumes:
+#      - ./scripts/create_cluster_id.sh:/tmp/create_cluster_id.sh
+#      - ./clusterID:/tmp/clusterID
     profiles:
       - kafka-gen
 
   kafka1:
-    image: confluentinc/cp-kafka:7.7.0
+    # deployment - container
     container_name: kafka1
-    hostname: kafka1
-    ports:
-      - "9092:9092"
+    image: confluentinc/cp-kafka:7.7.0
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -33,15 +31,17 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    # service - ports
+    ports:
+      - "9092:9092"
+    # others
     networks:
       stream_net:
 
   kafka2:
-    image: confluentinc/cp-kafka:7.7.0
+    # deployment - container
     container_name: kafka2
-    hostname: kafka2
-    ports:
-      - "9093:9093"
+    image: confluentinc/cp-kafka:7.7.0
     environment:
       KAFKA_NODE_ID: 2
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -59,15 +59,16 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    # service - ports
+    ports:
+      - "9093:9093"
+    # others
     networks:
       stream_net:
 
   kafka3:
-    image: confluentinc/cp-kafka:7.7.0
     container_name: kafka3
-    hostname: kafka3
-    ports:
-      - "9094:9094"
+    image: confluentinc/cp-kafka:7.7.0
     environment:
       KAFKA_NODE_ID: 3
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -85,12 +86,16 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CLUSTER_ID: 'Hx1R4WNlQfutDL_429wHzw'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    # service - ports
+    ports:
+      - "9094:9094"
+    # others
     networks:
       stream_net:
 
-  schema-registry:
+  kafka-schema-registry:
     image: confluentinc/cp-schema-registry:7.7.0
-    container_name: schema-registry
+    container_name: kafka-schema-registry
     depends_on:
       - kafka1
       - kafka2
@@ -98,9 +103,9 @@ services:
     ports:
       - '8081:8081'
     environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_HOST_NAME: kafka-schema-registry
       SCHEMA_REGISTRY_DEBUG: "true"
-      SCHEMA_REGISTRY_LISTENERS: "http://schema-registry:8081"
+      SCHEMA_REGISTRY_LISTENERS: "http://kafka-schema-registry:8081"
       SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: "full_transitive"
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:29092,PLAINTEXT://kafka2:29092,PLAINTEXT://kafka3:29092
     restart: always
@@ -108,16 +113,9 @@ services:
       stream_net:
 
   kafka-connect:
-    build:
-        context: ./shared/kafka-connect
+    # deployment - container
     container_name: kafka-connect
-    ports:
-      - "28083:28083"
-    depends_on:
-      - kafka1
-      - kafka2
-      - kafka3
-      - schema-registry
+    image: confluentinc/cp-kafka-connect:7.7.0
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
       CONNECT_REST_PORT: 28083
@@ -130,9 +128,9 @@ services:
       CONNECT_STATUS_STORAGE_TOPIC: _connect_status
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_KEY_CONVERTER: 'org.apache.kafka.connect.storage.StringConverter'
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://kafka-schema-registry:8081
       CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://kafka-schema-registry:8081
       CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
@@ -141,21 +139,22 @@ services:
 #      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
 #      CONNECT_LOG4J_LOGGERS: org.reflections=ERROR
 #      CLASSPATH: /usr/share/java/monitoring-interceptors/monitoring-interceptors-3.3.0.jar
-    networks:
-      stream_net:
-    volumes:
-      - ./shared/kafka-connect/connect-plugins:/usr/share/connector-plugins
-
-  kafka-connect-datagen:
-    image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
-    container_name: kafka-connect-datagen
-    restart: always
+    # service - ports
     ports:
-      - "8083:8083"
+      - "28083:28083"
+    # others
     depends_on:
       - kafka1
       - kafka2
       - kafka3
+      - kafka-schema-registry
+    networks:
+      stream_net:
+
+  kafka-connect-datagen:
+    # deployment - container
+    container_name: kafka-connect-datagen
+    image: cnfldemos/kafka-connect-datagen:0.6.4-7.6.0
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29092,kafka3:29092
       CONNECT_REST_PORT: 8083
@@ -170,31 +169,31 @@ services:
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://kafka-schema-registry:8081'
       CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
       CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+    # service - ports
+    ports:
+      - "8083:8083"
+    restart: always
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
     networks:
       stream_net:
 
   kafka-connect-ui:
-    image: provectuslabs/kafka-ui:latest
+    # deployment - container
     container_name: kafka-connect-ui
-    depends_on:
-      - schema-registry
-      - kafka1
-      - kafka2
-      - kafka3
-      - kafka-connect
-      - kafka-connect-datagen
-    ports:
-      - "8090:8080"
+    image: provectuslabs/kafka-ui:latest
     environment:
       CONNECT_URL: http://kafka-connect-datagen:8083,http://kafka-connect:28083
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29092,kafka2:29093,kafka3:29094
-      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://kafka-schema-registry:8081
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: kafka-connect-datagen
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect-datagen:8083
       KAFKA_CLUSTERS_0_KAFKACONNECT_1_NAME: kafka-connect
@@ -202,6 +201,17 @@ services:
       DYNAMIC_CONFIG_ENABLED: 'true'  # not necessary, added for tests
       KAFKA_CLUSTERS_0_AUDIT_TOPICAUDITENABLED: 'true'
       KAFKA_CLUSTERS_0_AUDIT_CONSOLEAUDITENABLED: 'true'
+    # service - ports
+    ports:
+      - "8090:8080"
+    # others
+    depends_on:
+      - kafka-schema-registry
+      - kafka1
+      - kafka2
+      - kafka3
+      - kafka-connect
+      - kafka-connect-datagen
     networks:
       stream_net:
 

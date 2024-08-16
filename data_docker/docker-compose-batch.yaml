@@ -1,3 +1,8 @@
+x-airflow-postgres: &airflow-postgres
+  POSTGRES_USER: airflow_user
+  POSTGRES_PASSWORD: airflow
+  POSTGRES_DB: airflow
+
 x-airflow-common: &airflow-common
   build:
     context: ./shared/airflow
@@ -12,9 +17,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
     AIRFLOW__CORE__SKIP_DB_INIT: 'true'
   volumes:
-    - ./shared/airflow/dags:/opt/airflow/dags
-    - ./shared/airflow/plugins:/opt/airflow/plugins
     - volumes-airflow-logs:/opt/airflow/logs
+#    - ./shared/airflow/dags:/opt/airflow/dags
+#    - ./shared/airflow/plugins:/opt/airflow/plugins
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
@@ -28,8 +33,7 @@ services:
     image: postgres:13
     container_name: airflow-postgres
     environment:
-      POSTGRES_USER: airflow_user
-      POSTGRES_PASSWORD: airflow
+      <<: *airflow-postgres
       POSTGRES_DB: airflow
     volumes:
       - volumes-airflow-postgres:/var/lib/postgresql/data
@@ -148,6 +152,8 @@ services:
       - TZ=Etc/GMT
     networks:
       batch_net:
+    profiles:
+      - debug
 
 volumes:
   volumes-airflow-postgres:

@@ -1,15 +1,19 @@
 services:
   postgres-db:
-    image: postgres:13
+    # deployment - container
     container_name: postgres-db
+    image: postgres:13
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: public
+    # deployment - volumes
     volumes:
       - volumes-postgres-db:/var/lib/postgresql/data
+    # service - ports
     ports:
       - "55432:5432"
+    # others
     restart: always
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "postgres" ]
@@ -19,15 +23,19 @@ services:
       db_net:
 
   mongo-db:
-    image: mongodb/mongodb-community-server:6.0-ubi8
+    # deployment - container
     container_name: mongo-db
-    ports:
-      - "27017:27017"
+    image: mongodb/mongodb-community-server:6.0-ubi8
     environment:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
+    # deployment - volumes
     volumes:
       - volumes-mongo-db:/data/db
+    # service - ports
+    ports:
+      - "27017:27017"
+    # others
     networks:
       db_net:
 
