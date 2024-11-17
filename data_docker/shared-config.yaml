@@ -1,0 +1,31 @@
+# Common environment variables
+x-common-environment: &minio-test-credentials
+  AWS_ACCESS_KEY_ID: minio
+  AWS_SECRET_ACCESS_KEY: minio123
+  AWS_REGION: us-east-1
+
+# Common resource configurations
+x-small-resources: &small-resources
+  deploy:
+    resources:
+      reservations:
+        cpus: '0.25'
+        memory: 512M
+      limits:
+        cpus: '0.5'
+        memory: 1G
+
+x-medium-resources: &medium-resources
+  deploy:
+    resources:
+      reservations:
+        cpus: '0.5'
+        memory: 1G
+      limits:
+        cpus: '1.0'
+        memory: 2G
+
+# Common network configuration
+x-network: &default-network
+  networks:
+    shared-data-net
