@@ -9,7 +9,7 @@ services:
     container_name: trino
     build:
       context: ./shared/trino
-    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+#    entrypoint: ["/bin/bash", "/entrypoint.sh"]
     environment:
       <<: *ams-iceberg-minio
     deploy:
@@ -22,7 +22,7 @@ services:
           memory: 1G   # Equivalent to 1GiB of memory
     # deployment - volumes
     volumes:
-      - ./shared/trino/entrypoint.sh:/entrypoint.sh  # Mount the entrypoint script
+      - ./shared/trino/catalog:/etc/catalog # Mount the entrypoint script
     # service - ports
     ports:
       - "28080:8080"

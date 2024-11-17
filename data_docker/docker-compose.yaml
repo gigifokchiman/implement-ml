@@ -1,12 +1,15 @@
 include:
-  - docker-compose-deploy-zone.yaml
-  - docker-compose-batch.yaml
-  - docker-compose-analytics.yaml
-  - docker-compose-stream.yaml
-  - docker-compose-stream-analytics.yaml
-  - docker-compose-data-stores.yaml
-  - docker-compose-logging.yaml
-  - docker-compose-overlay-jaffle_shop.yaml
+  - shared-config.yaml
+  - docker-compose-data-batch.yaml
+  - docker-compose-data-analytics.yaml
+  - docker-compose-data-database.yaml
+  - docker-compose-data-stream.yaml
+  - docker-compose-data-stream-analytics.yaml
+  - docker-compose-ml-datastore.yaml
+  - docker-compose-ml-mlflow.yaml
+  - docker-compose-ml-tensorflow.yaml
+  - docker-compose-monitoring.yaml
+  - docker-compose-app-jaffle_shop.yaml
 
 networks:
   analytics_net:
@@ -17,5 +20,8 @@ networks:
     driver: bridge
   db_net:
     driver: bridge
+  mlflow-net:
+    driver: bridge
+
 
 
