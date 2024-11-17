@@ -1,7 +1,7 @@
 include:
   - shared-config.yaml
-  - docker-compose-data-batch.yaml
-  - docker-compose-data-analytics.yaml
+  - docker-compose-data-airflow.yaml
+  - docker-compose-data-trino-iceberg.yaml
   - docker-compose-data-database.yaml
   - docker-compose-data-stream.yaml
   - docker-compose-data-stream-analytics.yaml
