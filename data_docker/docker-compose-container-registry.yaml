@@ -1,0 +1,27 @@
+services:
+  auth-gen:
+    image: httpd:alpine
+    command: sh -c "apk add --no-cache apache2-utils && htpasswd -Bbn ${REGISTRY_USERNAME} ${REGISTRY_PASSWORD} > /auth/htpasswd"
+    volumes:
+      - ./auth:/auth
+    environment:
+      - REGISTRY_USERNAME
+      - REGISTRY_PASSWORD
+
+  registry:
+    image: registry:2
+    ports:
+      - "25000:5000"
+    volumes:
+      - ./registry-data:/var/lib/registry
+      - ./auth:/auth
+      - ./certs:/certs
+    environment:
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: Registry
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/domain.crt
+      REGISTRY_HTTP_TLS_KEY: /certs/domain.key
+    restart: unless-stopped
+    depends_on:
+      - auth-gen
