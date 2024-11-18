@@ -1,6 +1,15 @@
-# Implement_ml
-This project is dedicated to show how to use open source tools to implement machine learning models.
-This includes data engineering, model training, model deployment, and model monitoring in AWS cloud.
+# Sandbox for data platform and ML model deployment
+
+A curated collection of Docker and Kubernetes configurations for rapidly deploying and evaluating various ML and data tools in local environments.
+
+## Motivation
+As ML engineers, we often need to evaluate different tools and frameworks before making architectural decisions.
+This project aims to provide ready-to-use configurations for quick local deployment of popular ML and data tools.
+
+## Available Configurations
+- Docker compose stacks
+- Kubernetes (kind) deployment
+
 
 ## References
 Terraform best practices
@@ -53,11 +62,8 @@ https://github.com/mrn-aglic/apache-iceberg-data-exploration/tree/main/minio
 test:
 - https://github.com/karpikpl/tests-with-docker-compose/blob/master/test.sh
 
-#Service	Default Port
-#Kafka Clients	9092
-#Kafka Control Plane	9093
-#ZooKeeper	2181
-#Kafka Connect	8083
-#Schema Registry	8081
-#REST Proxy	8082
-#ksqlDB	8088
+dbt observability
+- https://medium.com/@oravidov/dbt-observability-101-how-to-monitor-dbt-run-and-test-results-f7e5f270d6b6
+- https://github.com/calebebrim/kubernetes-data-pipeline/tree/main
+- https://spacelift.io/blog/kubectl-port-forward
+- https://medium.com/@muppedaanvesh/deploying-nginx-on-kubernetes-a-quick-guide-04d533414967
