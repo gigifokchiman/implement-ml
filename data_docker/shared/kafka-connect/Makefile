@@ -5,12 +5,6 @@ CONFIG_FILE := connector_elasticsearch.config
 
 all: delete add status
 
-download_connector:
-	@curl -O https://confluent-hub-client.s3-us-west-2.amazonaws.com/confluent-hub-client-2.0.0.tar.gz
-	@tar -xvzf confluent-hub-client-2.0.0.tar.gz
-	@mv confluent-hub-client-2.0.0/bin/confluent-hub /usr/local/bin
-	@rm -rf confluent-hub-client-2.0.0.tar.gz confluent-hub-client-2.0.0
-
 .PHONY: list
 list:
 	@curl -X GET "http://$(KAFKA_CONNECT_HOST):$(KAFKA_CONNECT_PORT)/connectors"
@@ -42,4 +36,20 @@ pause:
 .PHONY: resume
 resume:
 	@curl -X PUT "http://$(KAFKA_CONNECT_HOST):$(KAFKA_CONNECT_PORT)/connectors/$(KAFKA_CONNECT_CONNECTOR_NAME)/resume"
+
+kafka_sample_streams.log:
+	@echo "Starting Kafka stream operations..." && \
+	echo "Streams from connect from beginning" > $@ && \
+	docker-compose exec connect kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 --from-beginning >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from connect from beginning" >&2 && exit 1)
+	@echo "Streams from kafka from beginning" >> $@ && \
+	docker-compose exec kafka kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 --from-beginning >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from kafka from beginning" >&2 && exit 1)
+	@echo "Streams from connect" >> $@ && \
+	docker-compose exec connect kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from connect" >&2 && exit 1)
+	@echo "Streams from kafka" >> $@ && \
+	docker-compose exec kafka kafka-console-consumer --topic $(TOPIC_NAME) --bootstrap-server kafka:29092 --property print.key=true --max-messages 3 >> $@ 2>/dev/null || \
+	(echo "Error: Failed to get streams from kafka" >&2 && exit 1)
+	@echo "All Kafka stream operations completed successfully."
 

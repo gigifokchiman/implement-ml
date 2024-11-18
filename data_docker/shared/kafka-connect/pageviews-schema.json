@@ -1,9 +1,0 @@
-{
-  "type": "record",
-  "name": "PageView",
-  "fields": [
-    {"name": "viewtime", "type": "long"},
-    {"name": "userid", "type": "string"},
-    {"name": "pageid", "type": "string"}
-  ]
-}

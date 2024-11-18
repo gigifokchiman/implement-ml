@@ -1,0 +1,152 @@
+x-flink-common: &flink-common
+  image: flink:${FLINK_VERSION:-1.17.2}-java11
+  networks:
+    analytics_net:
+      aliases:
+        - flink.local
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  deploy:
+    resources:
+      limits:
+        memory: 4G
+        cpus: '2.0'
+      reservations:
+        memory: 2G
+        cpus: '1.0'
+  security_opt:
+    - no-new-privileges:true
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  labels: &default-labels
+    org.label-schema.environment: "${ENVIRONMENT:-development}"
+    org.label-schema.project: "flink-analytics"
+    com.company.maintainer: "analytics-team"
+
+services:
+  flink-jobmanager:
+    <<: *flink-common
+    container_name: flink-jobmanager
+    hostname: jobmanager
+    command:
+      - jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        jobmanager.memory.process.size: ${JOBMANAGER_MEMORY:-2g}
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+        state.savepoints.dir: file:///opt/flink/savepoints
+        web.timeout: 300000
+        heartbeat.timeout: 180000
+    volumes:
+      - volumes-flink-checkpoints:/opt/flink/checkpoints
+      - volumes-flink-savepoints:/opt/flink/savepoints
+      - volumes-flink-usrlib:/opt/flink/usrlib
+    ports:
+      - "${FLINK_UI_PORT:-8082}:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  flink-taskmanager:
+    <<: *flink-common
+    container_name: flink-taskmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: ${TM_SLOTS:-10}
+        taskmanager.memory.process.size: ${TM_MEMORY:-4g}
+        taskmanager.memory.network.max: ${TM_NETWORK_MEMORY:-1g}
+        taskmanager.memory.framework.heap.size: ${TM_FRAMEWORK_HEAP:-512m}
+        taskmanager.memory.task.heap.size: ${TM_TASK_HEAP:-1g}
+        taskmanager.memory.task.off-heap.size: ${TM_TASK_OFF_HEAP:-512m}
+    volumes:
+      - volumes-flink-task-manager-file-sink:/opt/flink/output
+      - volumes-flink-usrlib:/opt/flink/usrlib:ro
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "netstat -tnlp | grep 6122"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  flink-sql-client:
+    container_name: flink-sql-client
+    build:
+      context: ./shared/flink/sql-client
+      args:
+        FLINK_VERSION: ${FLINK_VERSION:-1.17.2}
+    environment:
+      FLINK_JOBMANAGER_HOST: flink-jobmanager
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka1:29092,kafka2:29092,kafka3:29092}
+      KAFKA_CONNECT: ${KAFKA_CONNECT:-kafka-connect}
+      KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka-connect}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres-db}
+      ES_HOST: ${ES_HOST:-logs-elasticsearch}
+      FLINK_SQL_CLIENT_MEMORY: ${SQL_CLIENT_MEMORY:-4g}
+    volumes:
+      - ./conf/sql-client:/opt/flink/conf
+      - volumes-flink-usrlib:/opt/flink/usrlib:ro
+    ports:
+      - "${SQL_CLIENT_PORT:-18083}:8083"
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+      kafka1:
+        condition: service_started
+      kafka2:
+        condition: service_started
+      kafka3:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8083"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      analytics_net:
+        aliases:
+          - sql-client.local
+    labels: *default-labels
+
+
+volumes:
+  volumes-flink-task-manager-file-sink:
+    name: volumes-flink-task-manager-file-sink
+    labels: *default-labels
+  volumes-flink-checkpoints:
+    name: volumes-flink-checkpoints
+    labels: *default-labels
+  volumes-flink-savepoints:
+    name: volumes-flink-savepoints
+    labels: *default-labels
+  volumes-flink-usrlib:
+    name: volumes-flink-usrlib
+    labels: *default-labels
+    
+    
+    
