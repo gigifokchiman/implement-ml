@@ -1,3 +1,6 @@
+CONVERT_TARGET:= ../data_kind
+ENV_FILE:= .env
+
 .PHONY: all
 all: clean build start
 
@@ -25,6 +28,9 @@ clean_docker:
 build:
 	@echo "building docker compose"
 	@docker-compose build
+
+add_secret:
+	@docker-compose --env-file $(ENV_FILE) up
 
 .PHONY: start
 start:
@@ -61,6 +67,14 @@ bash-%:
 
 curl-%:
 	@curl --write-out "%{http_code}" --silent --output /dev/null http://localhost:$%
+
+convert:
+	# kompose convert -f ../data_docker/docker-compose.yaml --out kubernetes.yaml
+	kompose convert -c -f docker-compose.yaml --controller deployment -o $(CONVERT_TARGET)/deployment.yaml
+	kompose convert -c -f docker-compose.yaml --controller service -o $(CONVERT_TARGET)/service.yaml
+#	kompose convert -f docker-compose.yaml --volumes persistentVolumeClaim -o volumes.yaml
+
+
 
 .PHONY: help
 help:

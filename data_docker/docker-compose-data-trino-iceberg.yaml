@@ -1,167 +1,196 @@
-x-common-environment: &ams-iceberg-minio
-  AWS_ACCESS_KEY_ID: minio
-  AWS_SECRET_ACCESS_KEY: minio123
-  AWS_REGION: us-east-1
-
 services:
   trino:
-    # deployment - container
     container_name: trino
     build:
       context: ./shared/trino
-#    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+      dockerfile: Dockerfile
+      args:
+        TRINO_VERSION: ${TRINO_VERSION:-414}
     environment:
-      <<: *ams-iceberg-minio
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-admin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-secure_password}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     deploy:
       resources:
         limits:
-          cpus: '1.0'  # Equivalent to 1 CPU
-          memory: 2G   # Equivalent to 2GiB of memory
+          cpus: '1.0'
+          memory: 2G
         reservations:
-          cpus: '0.5'  # Equivalent to 500m CPU
-          memory: 1G   # Equivalent to 1GiB of memory
-    # deployment - volumes
+          cpus: '0.5'
+          memory: 1G
     volumes:
-      - ./shared/trino/catalog:/etc/catalog # Mount the entrypoint script
-    # service - ports
+      - ./shared/trino/catalog:/etc/catalog:ro
     ports:
       - "28080:8080"
-    # others
     networks:
-      analytics_net:
+      - analytics_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      - iceberg-rest
-      - iceberg-minio
+      iceberg-minio:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   iceberg-rest:
-    # deployment - container
     container_name: iceberg-rest
-    image: tabulario/iceberg-rest
+    image: tabulario/iceberg-rest:${ICEBERG_REST_VERSION:-latest}
     environment:
-      <<: *ams-iceberg-minio
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-admin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-secure_password}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
       CATALOG_WAREHOUSE: s3://warehouse/
       CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
       CATALOG_S3_ENDPOINT: http://iceberg-minio:9000
-      CATALOG_URI: jdbc:postgresql://host.docker.internal:5433/iceberg_catalog
-      CATALOG_JDBC_USER: admin
-      CATALOG_JDBC_PASSWORD: password
-    # deployment - resources
+      CATALOG_URI: jdbc:postgresql://iceberg-postgres:5432/iceberg_catalog
+      CATALOG_JDBC_USER: ${POSTGRES_USER:-admin}
+      CATALOG_JDBC_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
     deploy:
       resources:
-        reservations:
-          cpus: '0.25'
-          memory: 512M
         limits:
           cpus: '0.5'
           memory: 1G
-    # service - ports
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     ports:
       - "8181:8181"
-    # others
     networks:
-      analytics_net:
+      - analytics_net
     depends_on:
       iceberg-postgres:
         condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   iceberg-postgres:
-    # deployment - container
     container_name: iceberg-postgres
-    image: postgres:13
+    image: postgres:${POSTGRES_VERSION:-13}-alpine
     environment:
-      PGDATA: /var/lib/postgresql/data
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
       POSTGRES_DB: iceberg_catalog
       POSTGRES_HOST_AUTH_METHOD: md5
-    # deployment - resources
+      PGDATA: /var/lib/postgresql/data
     deploy:
       resources:
-        reservations:
-          cpus: '0.25'
-          memory: 512M
         limits:
           cpus: '0.5'
           memory: 1G
-    # deployment - volumes
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     volumes:
       - volumes-iceberg-postgres:/var/lib/postgresql/data
-    # service - ports
     ports:
       - "5433:5432"
-    # others
     networks:
-      analytics_net:
+      - analytics_net
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U admin -d iceberg_catalog" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d iceberg_catalog"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: always
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   iceberg-minio:
-    # deployment - container
     container_name: iceberg-minio
-    image: minio/minio:latest
+    image: minio/minio:${MINIO_VERSION:-RELEASE.2024-01-16T16-07-38Z}
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
-      MINIO_DOMAIN: minio
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-secure_password}
+      MINIO_DOMAIN: ${MINIO_DOMAIN:-minio}
     command: ["server", "/data", "--console-address", ":9001"]
-    # deployment - resources
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     volumes:
       - volumes-iceberg-minio:/data
-    # service - ports
     ports:
-      - 9001:9001
-      - 9000:9000
-    # others
+      - "9001:9001"
+      - "9000:9000"
     networks:
       analytics_net:
         aliases:
           - warehouse.minio
     healthcheck:
-      test: [ "CMD", "mc", "ready", "local" ]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 20s
       retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   iceberg-mc:
-    # deployment - container
     container_name: iceberg-mc
-    image: minio/mc
+    image: minio/mc:${MINIO_MC_VERSION:-latest}
     environment:
-      <<: *ams-iceberg-minio
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-admin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-secure_password}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     entrypoint: >
       /bin/sh -c "
-      until (/usr/bin/mc config host add minio http://iceberg-minio:9000 minio minio123) do echo '...waiting...' && sleep 1; done;
+      until (/usr/bin/mc config host add minio http://iceberg-minio:9000 ${MINIO_ROOT_USER:-admin} ${MINIO_ROOT_PASSWORD:-secure_password}) do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc rm -r --force minio/warehouse;
-      /usr/bin/mc mb minio/warehouse mb minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
       /usr/bin/mc anonymous set download minio/warehouse;
       tail -f /dev/null
       "
-    # deployment - resources
     deploy:
       resources:
-        reservations:
-          cpus: '0.25'
-          memory: 100M
         limits:
           cpus: '0.5'
           memory: 200M
-    # deployment - volumes
+        reservations:
+          cpus: '0.25'
+          memory: 100M
     volumes:
       - volumes-iceberg-mc:/root/.mc
-    # service - ports
-    ports:
-      - 9002:9000
-    # others
-    depends_on:
-      - iceberg-minio
     networks:
-      analytics_net:
+      - analytics_net
+    depends_on:
+      iceberg-minio:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 
 volumes:
-  volumes-iceberg-minio:
-  volumes-iceberg-mc:
   volumes-iceberg-postgres:
+    name: volumes-iceberg-postgres
+  volumes-iceberg-minio:
+    name: volumes-iceberg-minio
+  volumes-iceberg-mc:
+    name: volumes-iceberg-mc

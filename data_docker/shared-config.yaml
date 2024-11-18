@@ -1,10 +1,27 @@
-# Common environment variables
-x-common-environment: &minio-test-credentials
-  AWS_ACCESS_KEY_ID: minio
-  AWS_SECRET_ACCESS_KEY: minio123
-  AWS_REGION: us-east-1
+# shared-config.yml
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
-# Common resource configurations
+x-minio-environment: &minio-test-credentials
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+
+x-minio-server: &minio-server-config
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+  MINIO_DOMAIN: ${MINIO_DOMAIN:-minio}
+
+x-postgres-config: &postgres-test-credentials
+  POSTGRES_USER: ${POSTGRES_USER:-admin}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+  POSTGRES_HOST_AUTH_METHOD: md5
+
 x-small-resources: &small-resources
   deploy:
     resources:
@@ -25,7 +42,3 @@ x-medium-resources: &medium-resources
         cpus: '1.0'
         memory: 2G
 
-# Common network configuration
-x-network: &default-network
-  networks:
-    shared-data-net

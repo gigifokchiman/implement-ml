@@ -1,18 +1,53 @@
+x-monitoring-resources: &monitoring-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 1G
+      reservations:
+        cpus: '0.25'
+        memory: 512M
+
+x-logging-resources: &logging-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 2G
+      reservations:
+        cpus: '0.5'
+        memory: 1G
+
+x-elasticsearch-healthcheck: &elasticsearch-healthcheck
+  healthcheck:
+    test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
+x-kibana-healthcheck: &kibana-healthcheck
+  healthcheck:
+    test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q 'Looking good'"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
 services:
   logs-elasticsearch:
-    # deployment - container
     container_name: logs-elasticsearch
-    image: elasticsearch:7.17.23
+    image: elasticsearch:${ELASTICSEARCH_VERSION:-7.17.23}
     environment:
       - cluster.name=dbt-docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - xpack.security.enabled=false
       - discovery.type=single-node
-    # deployment - volumes
+      - node.name=logs-elasticsearch
+      - network.host=0.0.0.0
     volumes:
-      - "volumes-logs-elasticsearch:/usr/share/elasticsearch/data"
-    # deployment - resources
+      - volumes-logs-elasticsearch:/usr/share/elasticsearch/data
+    <<: *logging-resources
+    <<: *elasticsearch-healthcheck
     ulimits:
       memlock:
         soft: -1
@@ -20,58 +55,100 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    mem_limit: 1g
-    # service - ports
     ports:
       - "9200:9200"
-      - '9300:9300'
-    # others
+      - "9300:9300"
     networks:
       stream_net:
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9200" ]
+    restart: unless-stopped
 
   logs-kibana:
-    # deployment - container
     container_name: logs-kibana
-    image: kibana:7.17.23
+    image: kibana:${KIBANA_VERSION:-7.17.23}
     environment:
       - ELASTICSEARCH_URL=http://logs-elasticsearch:9200
       - ELASTICSEARCH_HOSTS=http://logs-elasticsearch:9200
       - SERVER_NAME=kibana
       - SERVER_HOST=0.0.0.0
       - XPACK_MONITORING_UI_CONTAINER_ELASTICSEARCH_ENABLED=false
-    # deployment - volumes
+      - ELASTICSEARCH_SERVICEACCOUNTTOKEN=${KIBANA_SERVICE_TOKEN:-}
     volumes:
-      - "volumes-logs-kibana:/var/log"
-    # service - ports
+      - volumes-logs-kibana:/usr/share/kibana/data
+    <<: *monitoring-resources
+    <<: *kibana-healthcheck
     ports:
       - "5601:5601"
-    # others
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5601" ]
-    links:
-      - logs-elasticsearch
     depends_on:
-      - logs-elasticsearch
+      logs-elasticsearch:
+        condition: service_healthy
     networks:
       stream_net:
+    restart: unless-stopped
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:${PROMETHEUS_VERSION:-latest}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - volumes-prometheus:/prometheus
+    <<: *monitoring-resources
+    ports:
+      - "9090:9090"
+    networks:
+      stream_net:
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      tensorflow-serving:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:${GRAFANA_VERSION:-latest}
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - volumes-grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    <<: *monitoring-resources
+    ports:
+      - "3000:3000"
+    networks:
+      stream_net:
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   volumes-logs-elasticsearch:
+    name: ${COMPOSE_PROJECT_NAME:-logs}_elasticsearch
   volumes-logs-kibana:
+    name: ${COMPOSE_PROJECT_NAME:-logs}_kibana
+  volumes-prometheus:
+    name: ${COMPOSE_PROJECT_NAME:-monitoring}_prometheus
+  volumes-grafana:
+    name: ${COMPOSE_PROJECT_NAME:-monitoring}_grafana
 
-#  logstash:
-#    image: docker.elastic.co/logstash/logstash:7.17.23
-#    volumes:
-#      - "./logstash.conf:/config-dir/logstash.conf"
-#    restart: always
-#    command: logstash -f /config-dir/logstash.conf
-#    ports:
-#      - "9600:9600"
-#      - "7777:7777"
-#    links:
-#      - logs-elasticsearch
-#      - kafka1
-#      - kafka2
-#      - kafka3
+networks:
+  stream_net:
+    name: ${COMPOSE_PROJECT_NAME:-stream}_network
+    driver: bridge
+    

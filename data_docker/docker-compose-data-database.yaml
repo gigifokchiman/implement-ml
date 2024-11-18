@@ -1,44 +1,102 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-deploy: &default-resources
+  resources:
+    limits:
+      memory: 1G
+      cpus: '0.5'
+    reservations:
+      memory: 512M
+      cpus: '0.25'
+
+x-labels: &default-labels
+  org.label-schema.environment: "${ENVIRONMENT:-development}"
+  org.label-schema.project: "database-services"
+  com.company.maintainer: "platform-team"
+
 services:
   postgres-db:
-    # deployment - container
     container_name: postgres-db
-    image: postgres:13
+    image: postgres:${POSTGRES_VERSION:-13}-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: public
-    # deployment - volumes
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-public}
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     volumes:
       - volumes-postgres-db:/var/lib/postgresql/data
-    # service - ports
+      - ./init/postgres:/docker-entrypoint-initdb.d:ro
     ports:
-      - "55432:5432"
-    # others
-    restart: always
+      - "${POSTGRES_PORT:-55432}:5432"
+    deploy: *default-resources
+    restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-public}"]
       interval: 5s
+      timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
       db_net:
+        aliases:
+          - postgres.local
+    logging: *default-logging
+    labels: *default-labels
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
   mongo-db:
-    # deployment - container
     container_name: mongo-db
-    image: mongodb/mongodb-community-server:6.0-ubi8
+    image: mongodb/mongodb-community-server:${MONGO_VERSION:-6.0}-ubi8
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=user
-      - MONGO_INITDB_ROOT_PASSWORD=pass
-    # deployment - volumes
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-pass}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-admin}
+      MONGODB_LOG_VERBOSITY: ${MONGO_LOG_VERBOSITY:-0}
     volumes:
       - volumes-mongo-db:/data/db
-    # service - ports
+      - volumes-mongo-configdb:/data/configdb
+      - ./init/mongo:/docker-entrypoint-initdb.d:ro
     ports:
-      - "27017:27017"
-    # others
+      - "${MONGO_PORT:-27017}:27017"
+    deploy: *default-resources
+    restart: unless-stopped
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       db_net:
+        aliases:
+          - mongo.local
+    logging: *default-logging
+    labels: *default-labels
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 volumes:
   volumes-postgres-db:
+    name: volumes-postgres-db
+    labels: *default-labels
   volumes-mongo-db:
+    name: volumes-mongo-db
+    labels: *default-labels
+  volumes-mongo-configdb:
+    name: volumes-mongo-configdb
+    labels: *default-labels

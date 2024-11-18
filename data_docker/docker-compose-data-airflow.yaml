@@ -1,25 +1,18 @@
-x-airflow-postgres: &airflow-postgres
-  POSTGRES_USER: airflow_user
-  POSTGRES_PASSWORD: airflow
-  POSTGRES_DB: airflow
-
 x-airflow-common: &airflow-common
   build:
     context: ./shared/airflow
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:airflow@airflow-postgres:5432/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow_user:airflow@airflow-postgres:5432/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow_user}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-postgres:5432/${AIRFLOW_DB_NAME:-airflow}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${AIRFLOW_DB_USER:-airflow_user}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-postgres:5432/${AIRFLOW_DB_NAME:-airflow}
     AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
-    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-''}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
     AIRFLOW__CORE__SKIP_DB_INIT: 'true'
   volumes:
     - volumes-airflow-logs:/opt/airflow/logs
-#    - ./shared/airflow/dags:/opt/airflow/dags
-#    - ./shared/airflow/plugins:/opt/airflow/plugins
     - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
@@ -27,37 +20,71 @@ x-airflow-common: &airflow-common
       condition: service_healthy
     airflow-postgres:
       condition: service_healthy
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 2G
+      reservations:
+        cpus: '0.5'
+        memory: 1G
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  networks:
+    - batch_net
 
 services:
   airflow-postgres:
-    image: postgres:13
+    image: postgres:13-alpine
     container_name: airflow-postgres
     environment:
-      <<: *airflow-postgres
-      POSTGRES_DB: airflow
+      POSTGRES_USER: ${AIRFLOW_DB_USER:-airflow_user}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME:-airflow}
     volumes:
       - volumes-airflow-postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "airflow_user" ]
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_DB_USER:-airflow_user}"]
       interval: 5s
       retries: 5
+      timeout: 5s
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     restart: always
     networks:
-      batch_net:
+      - batch_net
 
   airflow-redis:
-    image: redis:latest
+    image: redis:7-alpine
     container_name: airflow-redis
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 30s
       retries: 50
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     restart: always
     networks:
-      batch_net:
+      - batch_net
 
   airflow-init:
     <<: *airflow-common
@@ -69,43 +96,37 @@ services:
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow_user}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-    networks:
-      batch_net:
 
   airflow-webserver:
     <<: *airflow-common
     command: webserver
     container_name: airflow-webserver
     ports:
-      - 8080:8080
+      - "8080:8080"
     healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
     restart: always
-    networks:
-      batch_net:
-#    extra_hosts:
-#      - "host.docker.internal:host-gateway"
 
   airflow-scheduler:
     <<: *airflow-common
-    container_name: airflow-scheduler
     command: scheduler
+    container_name: airflow-scheduler
     healthcheck:
-      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
     restart: always
-    networks:
-      batch_net:
 
   airflow-worker:
     <<: *airflow-common
-    container_name: airflow-worker
     command: celery worker
+    container_name: airflow-worker
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -113,26 +134,22 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
     restart: always
-    networks:
-      batch_net:
-#    extra_hosts:
-#      - "host.docker.internal:host-gateway"
 
   airflow-flower:
     <<: *airflow-common
-    container_name: airflow-flower
     command: celery flower
+    container_name: airflow-flower
     ports:
-      - 5555:5555
+      - "5555:5555"
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
     restart: always
-    networks:
-      batch_net:
 
   dbt-debug:
     container_name: dbt-debug
@@ -143,18 +160,27 @@ services:
       - -c
       - |
         echo "Launching dbt"
-        #
         sleep infinity
     restart: always
     volumes:
-      - ./shared/dbt/staging:/usr/app/dbt
+      - ./shared/dbt/staging:/usr/app/dbt:ro
     environment:
-      - TZ=Etc/GMT
+      TZ: Etc/GMT
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     networks:
-      batch_net:
+      - batch_net
     profiles:
       - debug
 
 volumes:
   volumes-airflow-postgres:
+    name: volumes-airflow-postgres
   volumes-airflow-logs:
+    name: volumes-airflow-logs

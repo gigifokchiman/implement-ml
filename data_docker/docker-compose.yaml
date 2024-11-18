@@ -1,15 +1,16 @@
 include:
   - shared-config.yaml
+  - docker-compose-container-registry.yaml
   - docker-compose-data-airflow.yaml
   - docker-compose-data-trino-iceberg.yaml
   - docker-compose-data-database.yaml
-  - docker-compose-data-stream.yaml
-  - docker-compose-data-stream-analytics.yaml
-  - docker-compose-ml-datastore.yaml
-  - docker-compose-ml-mlflow.yaml
-  - docker-compose-ml-tensorflow.yaml
-  - docker-compose-monitoring.yaml
-  - docker-compose-app-jaffle_shop.yaml
+  - docker-compose-data-kafka.yaml
+  - docker-compose-data-flink.yaml
+#  - docker-compose-ml-datastore.yaml
+#  - docker-compose-ml-mlflow.yaml
+#  - docker-compose-ml-tensorflow.yaml
+#  - docker-compose-monitoring.yaml
+#  - docker-compose-app-jaffle_shop.yaml
 
 networks:
   analytics_net:
